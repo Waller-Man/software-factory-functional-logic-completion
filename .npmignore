@@ -1,0 +1,16 @@
+**/__pycache__/
+**/*.pyc
+.venv/
+.work-temp/
+node_modules/
+test-results/
+artifacts/
+.env*
+credentials.json
+skills/
+.agents/
+.codex/
+.git/
+outputs/
+logs/
+*.log

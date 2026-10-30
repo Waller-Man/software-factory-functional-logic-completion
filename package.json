@@ -1,0 +1,52 @@
+{
+  "name": "@deepseek-ai/dsh-functional-logic-completion",
+  "version": "0.2.3",
+  "private": true,
+  "type": "module",
+  "description": "需求功能逻辑补全 — ReqCompleter v2.0 软件工厂 Run 后端插件",
+  "main": "./lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./package.json": "./package.json",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "lib",
+    "python/**/*.py",
+    "requirements",
+    "scripts/prepare-python.mjs",
+    "locale",
+    "icon.svg",
+    "cordis.patch.yml",
+    "README.md",
+    "THIRD_PARTY_NOTICES.md"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "4.0.5-alpha.1",
+    "@deepseek-ai/schemastery": "3.18.5-alpha.1",
+    "@deepseek-ai/dsh-tools": "0.2.1-alpha.2",
+    "@deepseek-ai/dsh-agent": "0.2.1-alpha.2",
+    "@deepseek-ai/dsh-sandbox-policy": "0.2.1-alpha.2",
+    "@deepseek-ai/dsh-subprocess": "0.2.1-alpha.2"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "node scripts/typecheck.mjs",
+    "test:entry": "node --experimental-transform-types --test tests/run-entry.test.ts",
+    "prepare:python": "node scripts/prepare-python.mjs",
+    "pack": "node scripts/pack.mjs"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "devDependencies": {
+    "@software-factory/runtime-sdk": "file:vendor/software-factory-runtime-sdk-0.1.0.tgz"
+  }
+}

@@ -1,0 +1,27 @@
+# Dependencies and generated packages
+/node_modules/
+/lib/
+/artifacts/
+
+# Python environments and caches
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Local diagnostics, tasks and logs
+/.work-temp/
+/test-results/
+/outputs/
+/logs/
+*.log
+
+# Local skills and assistant state (preserved locally)
+/skills/
+/.agents/
+/.codex/
+
+# Credentials and local configuration
+.env*
+credentials.json

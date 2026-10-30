@@ -1,0 +1,86 @@
+{
+  "sourceSha256": "42621e1f42e89dd3bb113ed04e04188e539d80055e239591ca86d751eca55104",
+  "modules": {
+    "ExtraTest.py": {
+      "add_to_memory": "8fbf39ff1985c1d7ef1f6eb1fe8d91317297668fc0e5231833f0f966b4cfe7e5",
+      "get_data_entities": "4e15b9b185a9ceab616134891f54dc7e0e3e3a5ffd8c6dd5968e7ca69b4bf2f8",
+      "get_use_cases": "28519796d97015809f498005b929b99cf5d80dd07f5c38671a1ba7edbc2f90a3",
+      "change_data_entities": "dac06d20e80b70d149aecc2273a86c3445f762d57a518a4a8b68ac1db70c42cf",
+      "change_use_cases": "a1c51cbe7c288a4652858c0917418b20f051aa8f7abbc00b8b09ad950d41c51b",
+      "extract_data_entities": "b200c9e893d07e395e2c5474cb927360ae7cddb5d8004ab8cd3cc14791f28105",
+      "generate_use_cases": "589df285b46c73fa88372a55a9ebc2d6fc87f2d36303ff13653c69fecf0e7105"
+    },
+    "TestCurdNew.py": {
+      "add_to_memory": "8fbf39ff1985c1d7ef1f6eb1fe8d91317297668fc0e5231833f0f966b4cfe7e5",
+      "set_curd": "fa1b6e4abf6612c2e7a59891e176152e149c81e5f6e47dd1ccecc5c88b7b00d5",
+      "clear_memory": "78701c0dcbaadc482b7c178e71d50906e9ce617b13a693ef9f67d4f93e406eb1",
+      "generate_curd_triples": "e2e53e9383afdf51a33738b4c186a9a4e7f758f47fb4d69034208593ebe880e6",
+      "convert_triples_to_matrix": "10ae0fa090fdd7737e448a3a170c8654aab569c343a9c6b2689f070a51bb3f3f",
+      "get_curd": "ccd27a96279818e2f0d3c2aae66faa836cb85ba627a224dd2712c999238c3510",
+      "check_uc_ett": "eafdc7913f0f5611e9103011f0100b80cfd901b10ab38c4c72909ac3895f749f",
+      "Complete_CRUD_Triplets": "fef0747926d9c4e31889205777a229edc4cadc10cb0c8d6dbe055d8ec2b7a8ea"
+    },
+    "UC_Agent.py": {
+      "add_to_memory": "521b984872fd23dcb38d691e5aa550039c5918feff1f2bcb4d9409a8d968f567",
+      "get_new_uc": "87034fa29f061d7e0be780d48c3d6cae864a4bcff333808d9319007e00fd48f2",
+      "get_memory": "f4aba627e66edb3c41a03d80c8b6c319c0d9cfa58d1c386c561025825588a4fb",
+      "clear_memory": "25ab82bd0c0d6ddd2f08927b94e7774e4a55c45078d3b6e2d5d7f48b80675e6f",
+      "reset_system_intro": "84b032fdbd2e884b93eff43ac57b333c113b6e74b6859b375b657726c1801314",
+      "set_data_entities": "aa2182cf7c6d8a03e7e4c5e42600c25141b7d3257b674044835acf84c7220e8f",
+      "get_data_entities": "4e15b9b185a9ceab616134891f54dc7e0e3e3a5ffd8c6dd5968e7ca69b4bf2f8",
+      "set_use_cases": "836c83b1e40aba756835632a327e0670635eefcddf566a3000ad13b0bdb41718",
+      "get_use_cases": "28519796d97015809f498005b929b99cf5d80dd07f5c38671a1ba7edbc2f90a3",
+      "set_er_model": "e560fc25b1c9b2d498971c4215b5019984754f361b233fa7af4e697a6919c63c",
+      "get_er_model": "018801f07a757044b6e590cc27270fc649f7aed02dd5f2953c3dcd284b3477ea",
+      "generate_use_case": "5837f593a347fc4ac578da71c0adac315e6e1ca9c3f03f9187f42588e1325134",
+      "generate_new_use_case": "a6ed89f422966f73c733a74aecf3f7ba1a0aa8d0e84a8aa4601e2530b9b5461a",
+      "generate_functional_requirements": "61003212a50eaffd4f39af82836101afb1c8c22d8bc62ab2bdf9654678fb17a4",
+      "generate_uc_diagram": "f5e905d4721cd1b1500d1f613e60879a3472b8ba1104e099c3c59bcad8cd73a7"
+    },
+    "ERcheckAgent.py": {
+      "add_to_memory": "8fbf39ff1985c1d7ef1f6eb1fe8d91317297668fc0e5231833f0f966b4cfe7e5",
+      "get_memory": "5e1e92946a690b141b60453095b73198421b0e066adc5681615d3f3267c04c36",
+      "clear_memory": "35041e4d397e296eda6c1eddd81659915eaca58a80a714d1733b6d15cf40a75b",
+      "reset_system_intro": "775936efd75408134c9c04326d05ee4096d80691692c629caffcfaa204fff6ba",
+      "set_data_entities": "aa2182cf7c6d8a03e7e4c5e42600c25141b7d3257b674044835acf84c7220e8f",
+      "get_data_entities": "4e15b9b185a9ceab616134891f54dc7e0e3e3a5ffd8c6dd5968e7ca69b4bf2f8",
+      "set_use_cases": "836c83b1e40aba756835632a327e0670635eefcddf566a3000ad13b0bdb41718",
+      "get_use_cases": "28519796d97015809f498005b929b99cf5d80dd07f5c38671a1ba7edbc2f90a3",
+      "set_er_model": "e560fc25b1c9b2d498971c4215b5019984754f361b233fa7af4e697a6919c63c",
+      "get_er_model": "018801f07a757044b6e590cc27270fc649f7aed02dd5f2953c3dcd284b3477ea",
+      "generate_er_model": "cf798ea3416b4c7b8b4e3a918b441c481fe863a71c2fe4dceb7b86dd45e9e70a",
+      "check_generate_er_model": "5cb796605852c0f8c6a7b042a52ab484752eef52754825bdefeede2a4342039d",
+      "Complete_ER_Diagram": "d60bfb165d5505ebd84827bbcbafe2ac9bf64d797094022df3d2481f965bfc6e",
+      "generate_er_code": "80e3ed367e58977925f9465ab5ecf038c70782cc5c2daf0da2cb92121e35a3a6"
+    },
+    "SRS_Agent.py": {
+      "add_to_memory": "8fbf39ff1985c1d7ef1f6eb1fe8d91317297668fc0e5231833f0f966b4cfe7e5",
+      "get_memory": "5e1e92946a690b141b60453095b73198421b0e066adc5681615d3f3267c04c36",
+      "clear_memory": "35041e4d397e296eda6c1eddd81659915eaca58a80a714d1733b6d15cf40a75b",
+      "get_data_entities": "4e15b9b185a9ceab616134891f54dc7e0e3e3a5ffd8c6dd5968e7ca69b4bf2f8",
+      "get_use_cases": "28519796d97015809f498005b929b99cf5d80dd07f5c38671a1ba7edbc2f90a3",
+      "set_data_entities": "aa2182cf7c6d8a03e7e4c5e42600c25141b7d3257b674044835acf84c7220e8f",
+      "set_use_cases": "836c83b1e40aba756835632a327e0670635eefcddf566a3000ad13b0bdb41718",
+      "generate_introduction": "4392ed13f22e2aefef5a6b3f36218e0f4ad46913b1b682e20a9bd429a4b6cf99",
+      "generate_overall_description": "a635823c8e204714b4647fcbebdc2c6943a761a24a1ae6c6ef2eba2eea954f2e",
+      "generate_external_interface": "142994e9af2b2025d2cb588cb0c884efa98f6f5dbdaf10eba921df91a7a6def7",
+      "generate_nonfunctional_requirement": "d11fd6fab9bc321679fd957d276cc8f6dbc3dfec687e9ee65a793e76b68065d2"
+    }
+  },
+  "helpers": {
+    "parse_crud_triplets": "6a3333c883ad478f7073a375b39bcdf5e97da15ddc994298d603e257a3d99d4f",
+    "build_crud_matrix_df": "bcd3fba753f2018447c9a68e1b3c2d52da7791c7ef8bbfb25890074d7cbaa270",
+    "programmatic_crud_gap_detection": "962d67caff56535017d141fee03404388440e8871723aeeacc2d9902e56c08f6",
+    "parse_llm_gap_response": "b595bf51f9ec267af15f61c2660a9a67d7f59648d40177c9c9a692723d796b36",
+    "combine_gap_detection": "3280e5ff2adfa7e236494a63f01125542cf9d6cddaa095cdd3fa93a45c77aee4",
+    "clean_entity_name": "b021396f5ae0164d8915930463a1a4343f2e55c7c20d780dda2a5b04dfbf1886",
+    "is_valid_entity_name": "906745ddec068300324250582b7b863887fe16e7dc94b79e600a55586132e9a7"
+  },
+  "systems": {
+    "ExtraTest": "You are an requirement engineering expert",
+    "TestCurdNew": "你是人工智能助手",
+    "UC_Agent": "You are an AI assistant.",
+    "ERcheckAgent": "你是人工智能助手",
+    "SRS_Agent": "你是人工智能助手"
+  }
+}
