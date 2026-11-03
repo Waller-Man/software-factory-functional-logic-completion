@@ -11,13 +11,15 @@ import {randomUUID} from 'node:crypto';
 import {StringDecoder} from 'node:string_decoder';
 import {CompletionError, errorCode, PACKAGE_VERSION, TOOL, type Input, type Options} from './contracts.ts';
 import {jsonLines, send, workerEvent, type WorkerFinal} from './protocol.ts';
-import {REQCOMPLETER_V2_0 as VERSION} from './versions/reqcompleter-v2_0.ts';
+import {REQCOMPLETER_V2_1 as VERSION} from './versions/reqcompleter-v2_1.ts';
 import {ProgressEstimate} from './progress.ts';
 
 const packageRoot = fileURLToPath(new URL('../', import.meta.url));
 const pythonEnv = {PYTHONDONTWRITEBYTECODE: '1', PYTHONUNBUFFERED: '1', PYTHONUTF8: '1', PYTHONNOUSERSITE: '1'};
 const stageNames: Record<string, string> = {
-  starting: '启动准备',
+  starting: '启动准备', render_environment: '检查本地画图环境',
+  core_document: '整理原始补全结果', functional_hierarchy: '整理功能层次',
+  layer_use_cases: '生成各层用例图', leaf_activities: '生成子功能活动图',
   extract_entities: '提取实体', generate_use_cases: '生成用例', describe_use_cases: '描述用例',
   generate_er_model: '生成 E-R 模型', generate_crud: '生成 CRUD 三元组', check_er_model: '检查 E-R 模型',
   crud_check: '检查 CRUD 缺口', complete_use_cases: '补全用例', complete_er_model: '补全 E-R 模型',
@@ -29,7 +31,9 @@ const stageNames: Record<string, string> = {
 export function runtimePaths(options: Options) {
   const python = options.pythonPath || join(packageRoot, '.venv', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python');
   if (!isAbsolute(python)) throw new CompletionError('INVALID_CONFIG', 'pythonPath 必须是服务端解释器的绝对路径。');
-  return {python, worker: join(packageRoot, VERSION.workerRelativePath)};
+  const plantumlJar = options.plantumlJarPath || join(packageRoot, 'tools/plantuml.jar');
+  if (!isAbsolute(plantumlJar)) throw new CompletionError('INVALID_CONFIG', 'plantumlJarPath 必须是绝对路径。');
+  return {python, worker: join(packageRoot, VERSION.workerRelativePath), plantumlJar};
 }
 export async function atomicJson(path: string, value: unknown): Promise<void> {
   const pending = path + '.' + randomUUID() + '.tmp';
@@ -39,6 +43,7 @@ export async function atomicJson(path: string, value: unknown): Promise<void> {
 function mime(path: string): string {
   if (path.endsWith('.docx')) return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
   if (path.endsWith('.zip')) return 'application/zip';
+  if (path.endsWith('.png')) return 'image/png';
   if (path.endsWith('.json')) return 'application/json';
   if (path.endsWith('.csv')) return 'text/csv';
   return 'text/plain';
@@ -46,6 +51,7 @@ function mime(path: string): string {
 
 export class CompletionRuntime {
   readonly paths: ReturnType<typeof runtimePaths>;
+  private javaPath = '';
   private readonly lifetime = new AbortController();
   private readonly active = new Set<Promise<BusinessResult>>();
   constructor(private readonly ctx: Context, private readonly options: Options) {
@@ -54,7 +60,9 @@ export class CompletionRuntime {
 
   async initialize(): Promise<void> {
     await access(this.paths.python); await access(this.paths.worker);
-    const text = await this.command(['--probe'], packageRoot, AbortSignal.timeout(this.options.probeTimeoutMs));
+    await access(this.paths.plantumlJar).catch(() => { throw new CompletionError('PLANTUML_NOT_READY', '请将 PlantUML JAR 放到 tools/plantuml.jar，或配置 plantumlJarPath。'); });
+    this.javaPath = await this.ctx.subprocess.resolveExecutable(this.options.javaPath);
+    const text = await this.command(['--probe', '--java-path', this.javaPath, '--plantuml-jar', this.paths.plantumlJar], packageRoot, AbortSignal.timeout(this.options.probeTimeoutMs));
     if (JSON.parse(text).ready !== true) throw new CompletionError('PYTHON_NOT_READY', '请先准备 Python 独立环境与锁定依赖。');
   }
 
@@ -86,7 +94,7 @@ export class CompletionRuntime {
       runId: execution.runId, toolId: TOOL, packageVersion: PACKAGE_VERSION,
       businessVersion: VERSION.businessVersion, implementationVersion: VERSION.implementationVersion,
       sourceSha256: VERSION.sourceSha256, model: execution.model.selection ?? null,
-      parameters: {maxIterations: this.options.maxIterations}, startedAt: new Date().toISOString(),
+      parameters: {maxIterations: this.options.maxIterations, javaPath: this.javaPath, plantumlJarPath: this.paths.plantumlJar}, startedAt: new Date().toISOString(),
     };
     let directoryValidated = false;
     try {
@@ -99,7 +107,7 @@ export class CompletionRuntime {
       await atomicJson(join(directory, 'manifest.json'), manifest);
       await execution.reportProgress({stage: 'starting', stageName: '启动准备', progress: estimate.advance('starting'),
         message: '正在启动 Python 并检查任务目录写入。'});
-      await execution.log('ReqCompleter v2.0 开始执行；模型和任务目录由 Run 固定。', 'starting');
+      await execution.log('ReqCompleter v2.1 开始执行；模型和任务目录由 Run 固定。', 'starting');
       const registerMaterials = () => this.materials(execution, indexed);
       const result = await this.worker(input, execution, signal, registerMaterials, estimate);
       signal.throwIfAborted();
@@ -110,6 +118,7 @@ export class CompletionRuntime {
         executionStatus: 'succeeded', documentStatus: 'generated',
         convergenceStatus: result.converged ? 'converged' : 'not_converged',
         iterations: result.iterations, reachedIterationLimit: result.reached_iteration_limit,
+        diagramStatus: result.diagram_status, diagramCount: Array.isArray(result.diagrams) ? result.diagrams.length : 0,
         finishedAt: new Date().toISOString(),
       });
       await atomicJson(join(directory, 'manifest.json'), manifest);
@@ -119,11 +128,11 @@ export class CompletionRuntime {
       await this.command(['--archive', directory], directory, signal);
       await registerMaterials();
       const files: string[] = [];
-      for (const name of ['requirements.docx', 'checks.zip', 'result.json']) {
+      for (const name of ['requirements.docx', 'functional-tree.json', 'diagrams.zip', 'checks.zip', 'result.json']) {
         const file = await execution.addArtifact({kind: 'final', name, relativePath: 'final/' + name, mime: mime(name)});
         files.push(file.artifactId);
       }
-      const text = `需求说明书已生成；检查轮次 ${result.iterations}，${result.converged ? '方法判定收敛' : '方法未判定收敛'}，${result.reached_iteration_limit ? '已达到迭代上限' : '未达到迭代上限'}。收敛不代表需求内容已经完整正确。`;
+      const text = `含分层功能及用例／活动图的需求说明书已生成；检查轮次 ${result.iterations}，${result.converged ? '方法判定收敛' : '方法未判定收敛'}，${result.reached_iteration_limit ? '已达到迭代上限' : '未达到迭代上限'}。收敛不代表需求内容已经完整正确。`;
       await execution.log(text, 'publishing');
       await execution.reportProgress({stage: 'completed', stageName: '交付完成', progress: estimate.finish(),
         message: '文档及检查材料已登记；最终任务是否成功以 Run 状态为准。'});
@@ -212,7 +221,8 @@ export class CompletionRuntime {
     try {
       if (!process.stdin || !process.stdout) throw new CompletionError('PROCESS_IO', 'Python 标准输入输出管道不可用。');
       await send(process.stdin, {type: 'start', protocolVersion: 1, runId: execution.runId,
-        software_intro: input.software_intro, max_iterations: this.options.maxIterations, output_dir: execution.outputDirectory}, this.options.maxProtocolBytes);
+        software_intro: input.software_intro, max_iterations: this.options.maxIterations, output_dir: execution.outputDirectory,
+        java_path: this.javaPath, plantuml_jar: this.paths.plantumlJar}, this.options.maxProtocolBytes);
       let final: WorkerFinal | undefined;
       const requests = new Set<string>();
       for await (const line of jsonLines(process.stdout, this.options.maxProtocolBytes)) {
@@ -235,10 +245,11 @@ export class CompletionRuntime {
         } else if (event.type === 'step') {
           const round = typeof event.iteration === 'number' ? event.iteration : 0;
           await execution.reportProgress({stage: event.step, stageName: stageNames[event.step] ?? event.step,
-            progress: estimate.advance(event.step, event.status, round, event.converged === true),
+            progress: estimate.advance(event.step, event.status, round, event.converged === true,
+              typeof event.completed === 'number' ? event.completed : 0, typeof event.total === 'number' ? event.total : 0),
             message: event.step === 'starting' && event.status === 'completed'
               ? 'Python 已接收任务并完成目录写入检查（估算进度）。'
-              : `${round ? `第 ${round} 轮：` : ''}${event.status === 'completed' ? '阶段完成' : '正在处理'}（估算进度）`});
+              : `${typeof event.total === 'number' ? `已完成 ${event.completed ?? 0}/${event.total} 张；${event.nodeName ?? ''} ` : ''}${round ? `第 ${round} 轮：` : ''}${event.status === 'completed' ? '阶段完成' : '正在处理'}（估算进度）`});
           await registerMaterials();
         } else if (event.type === 'artifact') {
           // Final files are registered only after successful worker exit.
@@ -271,7 +282,7 @@ export class CompletionRuntime {
     let failed = false;
     try {
       const outcome = await handle.done; signal.throwIfAborted();
-      if (outcome.exitCode !== 0) throw new CompletionError(args[0] === '--probe' ? 'PYTHON_NOT_READY' : 'ARCHIVE_FAILED', 'Python 环境检查或检查包生成失败。');
+      if (outcome.exitCode !== 0) throw new CompletionError(args[0] === '--probe' ? 'PYTHON_NOT_READY' : 'ARCHIVE_FAILED', 'Python/Java/PlantUML 环境检查或检查包生成失败，请检查本地依赖和配置。');
       const output = handle.collected.stdout?.readFrom(0);
       if (!output || output.lossy) throw new CompletionError('PROCESS_IO', 'Python 命令未返回完整输出。');
       return output.text;

@@ -14,5 +14,5 @@ const python=join(destination,process.platform==='win32'?'Scripts':'bin',process
 if(!existsSync(python))run(base,['-m','venv',destination]);
 run(python,['-m','ensurepip','--upgrade']);
 run(python,['-m','pip','install','--disable-pip-version-check','--retries','1','--timeout','30','--index-url','https://pypi.org/simple','-r',join(root,'requirements','requirements-py312.lock.txt')]);
-run(python,['-B',join(root,'python','worker.py'),'--probe']);
+run(python,['-B',join(root,'python','worker_v2_1.py'),'--probe']);
 console.log(`Prepared independent environment: ${python}`);

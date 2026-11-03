@@ -18,9 +18,9 @@ import Plugin from '../lib/index.js';
 const root = fileURLToPath(new URL('..', import.meta.url));
 const runtimeSource = resolve(process.env.SF_RUNTIME_SOURCE ?? join(root, '../reconstruct/packages/runtime'));
 const {default: Runtime} = await import(pathToFileURL(join(runtimeSource, 'lib/index.js')).href);
-const TOOL = 'sf_functional_logic_completion_v2_0';
+const TOOL = 'sf_functional_logic_completion_v2_1';
 
-async function fixture(options: {mode?: 'read-only' | 'workspace-write'; stallStartup?: boolean} = {}) {
+async function fixture(options: {mode?: 'read-only' | 'workspace-write'; stallStartup?: boolean; illustrated?: boolean} = {}) {
   const ctx = new Context();
   const results = join(root, 'test-results'); await mkdir(results, {recursive: true});
   const workspace = await mkdtemp(join(process.env.REQ_ENTRY_TEST_PARENT ?? results, 'run-entry-'));
@@ -37,26 +37,49 @@ async function fixture(options: {mode?: 'read-only' | 'workspace-write'; stallSt
   const launches: SubprocessSpawnSpec[] = [];
   ctx.subprocess.spawn = (spec: SubprocessSpawnSpec) => {
     launches.push(spec);
-    const business = spec.argv.includes(join(root, 'python/worker.py')) && !spec.argv.includes('--probe') && !spec.argv.includes('--archive');
+    const business = spec.argv.includes(join(root, 'python/worker_v2_1.py')) && !spec.argv.includes('--probe') && !spec.argv.includes('--archive');
     const handle = spawn(business ? {...spec,
       env: {...spec.env, REQ_TEST_STALL_STARTUP: options.stallStartup ? '1' : '0'},
-      argv: spec.argv.map(arg => arg === join(root, 'python/worker.py') ? join(root, 'tests/worker_stub.py') : arg)} : spec);
+      argv: spec.argv.map(arg => arg === join(root, 'python/worker_v2_1.py') ? join(root, options.illustrated ? 'tests/worker_v21_output.py' : 'tests/worker_stub.py') : arg)} : spec);
     if (business) workers.push(handle);
     return handle;
   };
   const requests: GenerateOptions[] = [];
   class MockModel extends LlmAdapter {
     async listModels(provider: string) {return [{provider, id: 'mock', name: 'Synthetic model'}];}
-    async *stream(options: GenerateOptions) {
-      requests.push(options);
-      yield {type: 'text-delta' as const, index: 0, text: 'synthetic reply'};
+    async *stream(request: GenerateOptions) {
+      requests.push(request);
+      const fixture = JSON.parse(await readFile(join(root, 'tests/v21-fixture.json'), 'utf8'));
+      let text = 'synthetic reply';
+      if (options.illustrated) {
+        text = requests.length === 1 ? JSON.stringify(fixture.tree)
+          : requests.length <= 3
+            ? `@startuml
+actor Admin
+rectangle Products {
+usecase "Function ${requests.length}" as U
+Admin --> U
+}
+@enduml`
+            : `@startuml
+start
+:Leaf ${requests.length};
+if (Valid?) then (yes)
+:Save;
+else (no)
+:Report;
+endif
+stop
+@enduml`;
+      }
+      yield {type: 'text-delta' as const, index: 0, text};
       yield {type: 'usage' as const, usage: {inputTokens: 3, outputTokens: 2}};
       yield {type: 'finish' as const, reason: {kind: 'stop' as const}};
     }
   }
   ctx.llm.registerAdapter(['mock-A', 'mock-B'], new MockModel());
   await ctx.plugin(Runtime, {allowedToolIds: [TOOL], defaultTimeoutMs: 15000});
-  const plugin = await ctx.plugin(Plugin, options.stallStartup ? {probeTimeoutMs: 1000} : {});
+  const plugin = await ctx.plugin(Plugin, options.stallStartup ? {probeTimeoutMs: 6000} : {});
   async function call(action: string, args: object) {
     const result = await ctx.tools.execute({name: 'sf_runtime_' + action, arguments: args,
       agent, callId: ToolCallId(randomUUID()), signal: AbortSignal.timeout(20000)});
@@ -150,7 +173,7 @@ test('built SDK entry: native Run, fake model, real small DOCX and artifact IDs'
     const request = JSON.parse(await readFile(join(directory, 'input/request.json'), 'utf8'));
     assert.equal(request.toolId, TOOL, 'Run request is not overwritten by Python');
     assert.equal(JSON.parse(await readFile(join(directory, 'input/reqcompleter-request.json'), 'utf8')).runId, run.runId);
-    assert.equal(run.result.files.length, 3);
+    assert.equal(run.result.files.length, 5);
     assert.ok(run.artifacts.some((a: any) => a.relativePath === 'intermediate/initial/entities.json'));
     assert.ok(run.artifacts.some((a: any) => a.relativePath === 'snapshots/iterations/001/after.json'));
     for (const file of run.result.files) {
@@ -186,4 +209,38 @@ test('native Run cancellation stops the Python fixture and retains partial mater
   assert.equal(f.workers.length, 1);
   assert.equal(await f.workers[0]!.waitForExit(AbortSignal.timeout(1000)), true);
   assert.ok((await stat(join(f.workspace, 'outputs/runs', run.runId, 'snapshots/iterations/001/before.json'))).isFile());
+});
+
+
+test('v2.1 native Run: isolated mock model, real local images and coexistence with v2.0', {timeout: 45000}, async t => {
+  const f = await fixture({illustrated: true}); t.after(() => f.ctx.fiber.dispose());
+  const {default: OldPlugin} = await import(pathToFileURL(join(root, '../DSH-Functional-Logic-Completion-Plugin/lib/index.js')).href);
+  await f.ctx.plugin(OldPlugin);
+  for (const toolId of [TOOL, 'sf_functional_logic_completion_v2_0']) {
+    const contract = await f.call('get_tool_contract', {toolId});
+    assert.equal(contract.supportsRun, true);
+  }
+  const accepted = await f.call('run_tool', {toolId: TOOL,
+    input: {software_intro: '管理员增加商品，录入并保存信息。'}, model: {provider: 'mock-B', model: 'mock'}});
+  const run = await f.finish(accepted.runId);
+  assert.equal(run.status, 'completed', JSON.stringify(run));
+  assert.equal(run.model.provider, 'mock-B');
+  assert.equal(f.agent.options.provider, 'mock-A');
+  assert.equal(f.requests.length, 5);
+  assert.ok(f.requests.every(request => request.sessionId?.startsWith('sf-run-model-')));
+  assert.equal(run.result.files.length, 5);
+  const directory = join(f.workspace, 'outputs/runs', run.runId);
+  const result = JSON.parse(await readFile(join(directory, 'final/result.json'), 'utf8'));
+  assert.equal(result.business_version, '2.1');
+  assert.equal(result.diagram_status, 'generated');
+  assert.equal(result.diagrams.length, 4);
+  for (const diagram of result.diagrams) {
+    const bytes = await readFile(join(directory, diagram.image));
+    assert.equal(bytes.subarray(1, 4).toString(), 'PNG');
+  }
+  const manifest = JSON.parse(await readFile(join(directory, 'manifest.json'), 'utf8'));
+  assert.equal(manifest.businessVersion, 'v2.1');
+  assert.equal(manifest.diagramCount, 4);
+  assert.equal(manifest.model.provider, 'mock-B');
+  assert.equal(run.progress, 100);
 });

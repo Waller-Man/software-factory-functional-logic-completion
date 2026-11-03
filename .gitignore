@@ -2,6 +2,7 @@
 /node_modules/
 /lib/
 /artifacts/
+/tools/*.jar
 
 # Python environments and caches
 .venv/

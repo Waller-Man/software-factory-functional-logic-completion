@@ -1,1 +1,1 @@
-{"meta":{"title":"需求功能逻辑补全","description":"通过软件工厂 Run 执行 ReqCompleter v2.0，交付需求说明书并保留逐轮检查材料。"}}
+{"meta": {"title": "需求功能逻辑补全 v2.1", "description": "通过 Run 补全需求，生成分层功能、用例图和活动图，并插入 Word 文档。"}}

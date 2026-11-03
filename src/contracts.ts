@@ -1,7 +1,7 @@
-import {REQCOMPLETER_V2_0} from './versions/reqcompleter-v2_0.ts';
+import {REQCOMPLETER_V2_1} from './versions/reqcompleter-v2_1.ts';
 
-export const TOOL = REQCOMPLETER_V2_0.toolName;
-export const PACKAGE_VERSION = '0.2.3';
+export const TOOL = REQCOMPLETER_V2_1.toolName;
+export const PACKAGE_VERSION = '0.3.0';
 export const INPUT_SCHEMA = {
   type: 'object',
   properties: {
@@ -14,6 +14,8 @@ export const INPUT_SCHEMA = {
 export interface Input {software_intro: string}
 export interface Options {
   pythonPath: string;
+  javaPath: string;
+  plantumlJarPath: string;
   maxIterations: number;
   maxConcurrent: number;
   probeTimeoutMs: number;

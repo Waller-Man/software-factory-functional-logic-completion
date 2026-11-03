@@ -1,0 +1,110 @@
+{
+  "agent": {
+    "agent_id": "agent:functional-logic-completion",
+    "name": "需求功能逻辑补全",
+    "description": "根据用户描述的软件系统及需求，结合用例、实体关系与 CRUD 缺口分析进行迭代需求补全，生成软件需求文档。"
+  },
+  "agentVersion": {
+    "version": "v2.1",
+    "status": "enabled",
+    "description": "在需求迭代补全基础上，增加功能分层、分层用例图和底层子功能活动图，生成内嵌图像的软件需求文档。",
+    "developer": "吴祝骏、叶博一",
+    "invoke_kind": "dsh_tool",
+    "dsh_ref": "sf_functional_logic_completion_v2_1",
+    "input_schema": {
+      "description": "用户自然语言描述的软件系统及需求",
+      "x-artifact-kind": "text",
+      "x-media-type": "text/plain",
+      "x-required": true,
+      "x-allow-blank": false
+    },
+    "output_schema": {
+      "description": "补全后的软件需求文档，包含功能分层、分层用例图和子功能活动图；同时交付功能树 JSON、图文件 ZIP、检查材料 ZIP 和结果 JSON。",
+      "x-artifact-kind": "file",
+      "x-file-extensions": [
+        ".docx",
+        ".json",
+        ".zip"
+      ]
+    },
+    "intermediate_artifacts_json": [
+      {
+        "description": "初始需求分析",
+        "x-artifact-kind": "file",
+        "x-file-extension": ".json"
+      },
+      {
+        "description": "逐轮检查与补全快照",
+        "x-artifact-kind": "file",
+        "x-file-extension": ".json"
+      },
+      {
+        "description": "CRUD矩阵及检查结果",
+        "x-artifact-kind": "file",
+        "x-file-extension": ".json"
+      },
+      {
+        "description": "E-R图源码",
+        "x-artifact-kind": "file",
+        "x-file-extension": ".puml"
+      },
+      {
+        "description": "用例图源码",
+        "x-artifact-kind": "file",
+        "x-file-extension": ".puml"
+      },
+      {
+        "description": "功能分层树及图索引",
+        "x-artifact-kind": "file",
+        "x-file-extension": ".json"
+      },
+      {
+        "description": "分层用例图源码",
+        "x-artifact-kind": "file",
+        "x-file-extension": ".puml"
+      },
+      {
+        "description": "分层用例图图片",
+        "x-artifact-kind": "file",
+        "x-file-extension": ".png"
+      },
+      {
+        "description": "子功能活动图源码",
+        "x-artifact-kind": "file",
+        "x-file-extension": ".puml"
+      },
+      {
+        "description": "子功能活动图图片",
+        "x-artifact-kind": "file",
+        "x-file-extension": ".png"
+      }
+    ],
+    "constraints_json": {
+      "runtime": "Python",
+      "version": "3.12",
+      "node": ">=24",
+      "dsh": "0.2.1-alpha.2",
+      "runtimePlugin": "0.1.0",
+      "java": "21",
+      "plantuml": "1.2026.9（JAR 随包提供）"
+    },
+    "model_dependencies_json": [
+      {
+        "vendor": "DeepSeek",
+        "name": "deepseek-v4.1-flash"
+      }
+    ],
+    "object_categories_json": [
+      "软件系统及需求描述",
+      "软件需求文档"
+    ],
+    "performance_evidence_json": {
+      "evidence_kind": "paper",
+      "summary": "ICSE 2026 论文；使用Qwen3-32B模型，得出以下效果：需求完整率（RR）为 112.9%、数据实体完整率（DR）为 125%、幻觉率（HR）为 0%；7 个案例平均最终 CRUD 缺口率（CR）为 0%。",
+      "local_validation": {
+        "evidence_kind": "synthetic_integration_test",
+        "summary": "v2.1 图文输出及 Run 调用已通过模拟模型验证。"
+      }
+    }
+  }
+}

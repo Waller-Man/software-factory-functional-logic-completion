@@ -1,9 +1,9 @@
 {
-  "name": "@deepseek-ai/dsh-functional-logic-completion",
-  "version": "0.2.3",
+  "name": "@deepseek-ai/dsh-functional-logic-completion-v2-1",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
-  "description": "需求功能逻辑补全 — ReqCompleter v2.0 软件工厂 Run 后端插件",
+  "description": "需求功能逻辑补全 v2.1 — 分层功能、用例图和活动图的 Run 后端插件",
   "main": "./lib/index.js",
   "exports": {
     ".": "./lib/index.js",
@@ -21,7 +21,12 @@
     "icon.svg",
     "cordis.patch.yml",
     "README.md",
-    "THIRD_PARTY_NOTICES.md"
+    "THIRD_PARTY_NOTICES.md",
+    "tools/README.md",
+    "tools/plantuml.jar",
+    "tools/plantuml-LICENSE.txt",
+    "tools/plantuml-NOTICE.md",
+    "tools/plantuml-licenses"
   ],
   "dsh": {
     "bundle": {

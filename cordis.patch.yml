@@ -1,4 +1,4 @@
 - insert:
-    - id: functional-logic-completion
-      name: '@deepseek-ai/dsh-functional-logic-completion'
+    - id: functional-logic-completion-v2-1
+      name: '@deepseek-ai/dsh-functional-logic-completion-v2-1'
       config: {}

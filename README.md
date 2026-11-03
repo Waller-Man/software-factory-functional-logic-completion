@@ -1,205 +1,120 @@
-# 需求功能逻辑补全
+# 需求功能逻辑补全 v2.1
 
-在 DSH 网页中提交软件需求，通过软件工厂 Run 执行 ReqCompleter v2.0，生成需求说明书，并保留逐轮检查材料。
+DSH 后端插件，通过软件工厂 Run 执行需求补全，将功能拆成“大功能 → 子功能”，由 AI 生成各层用例图和末级子功能活动图，在服务端本地渲染后插入 Word 文档。
 
-| 项目 | 说明 |
+| 项目 | 值 |
 |---|---|
-| 插件版本 | 0.2.3 |
-| 算法版本 | ReqCompleter v2.0 |
-| 输入 | 自然语言软件需求 |
-| 输出 | DOCX 需求说明书、检查材料 ZIP、结构化 JSON |
+| 插件包 | `@deepseek-ai/dsh-functional-logic-completion-v2-1`，0.3.0 |
+| 插件显示名称 | 需求功能逻辑补全 v2.1 |
+| 业务版本 | ReqCompleter v2.1 |
+| 执行入口 | `sf_functional_logic_completion_v2_1` |
+| 交付 | 图文需求说明书、功能树 JSON、图文件 ZIP、检查材料 ZIP、结果 JSON |
 
-## 环境要求
+此包使用独立的插件 ID、服务名和 Tool，可与旧 v2.0 插件同时安装。v2.0 补全核心保持原样，新增功能在其完成后执行。
 
-以下环境应准备在运行 DSH 的电脑上：
+## 新环境快速启动
 
-- DSH 0.2.1-alpha.2，Node.js 24 或以上版本。
-- 软件工厂 Runtime 0.1.0（提供 Run 任务服务）。
-- Python 3.12，使用独立虚拟环境；完整依赖见 `requirements/requirements-py312.lock.txt`。
-- DSH 中已配置可用模型，并有一个可写的工作区。
+以下操作在 **DSH 服务端电脑** 上进行，不是在远程浏览器所在电脑上。
 
-本插件通过 DSH 调用模型，无需单独配置 API Key。
+### 1. 准备环境
 
-## 新环境快速安装
+- 兼容的 DSH 0.2.1-alpha.2、Node.js 24+。
+- 在同一 DSH profile 中安装并启用软件工厂 Runtime 0.1.0；SDK 已随本插件打包，Runtime 仍需单独安装。
+- Python 3.12，支持 venv/pip。
+- Java 21，`java` 已加入 PATH。
+- **发布包已包含 PlantUML 1.2026.9，位于 `tools/plantuml.jar`，无需另行下载、复制或配置。** 许可证和来源说明一并提供。
+- DSH 中配置可用模型，并从允许写入的真实工作区聊天发起任务。Linux 渲染中文还需中文字体，例如 Noto CJK。
 
-以下步骤使用完整发布包。如果从 Git 克隆源码，请先完成文末“从源码构建”，再执行本节。
+PlantUML JAR 随包提供，Java 和 Python 需在服务端准备；任务不会将需求发送到公共画图网站，也不会临时下载 JAR 或 pip install。默认采用 Smetana，不要求单独安装 Graphviz。
 
-### 1. 准备插件文件
+### 2. 准备 Python
 
-将 Runtime 和本插件的完整发布目录放到运行 DSH 的电脑上。例如：
-
-```text
-D:\DSH-plugins\software-factory-runtime\
-D:\DSH-plugins\dsh-functional-logic-completion\
-```
-
-**两个目录可以放在不同磁盘或文件夹中，无需相邻。** 每个安装目录应直接包含 `package.json` 和 `cordis.patch.yml`。使用 TGZ 包时，先解压，再选择其中符合上述条件的目录。
-
-本插件发布目录为 `artifacts/release/dsh-functional-logic-completion/`，安装包为 `artifacts/deepseek-ai-dsh-functional-logic-completion-0.2.3.tgz`。新电脑使用发布包即可，无需重新构建或单独安装 SDK。
-
-### 2. 准备 Python 环境
-
-在 PowerShell 中执行。请将以下路径替换为实际安装位置：
+在本插件发布目录打开 PowerShell，替换实际路径后执行一次：
 
 ```powershell
-Set-Location 'D:\DSH-plugins\dsh-functional-logic-completion'
+Set-Location 'D:\DSH-plugins\dsh-functional-logic-completion-v2-1'
 node .\scripts\prepare-python.mjs 'C:\Python312\python.exe'
 ```
 
-脚本会创建虚拟环境、安装锁定依赖并检查环境，需要能够访问 PyPI。检查输出包含 `"ready": true` 即表示环境就绪。新电脑应重新创建环境，不复制旧电脑的 `.venv`。
+脚本自动创建插件目录内的 `.venv`、执行锁定依赖的 pip install，并检查 Python、Java 和 PlantUML。出现 `"ready": true` 表示环境探测通过；不代表完整任务已经成功。无需额外手工 pip install、激活 venv 或启动 Python 服务。
 
-**不需要再手工执行 `pip install`，也不需要激活 venv。** 此脚本已依次执行 `python -m venv`、`python -m ensurepip --upgrade`、`python -m pip install -r requirements/requirements-py312.lock.txt` 和环境探测。依赖包括 pandas、python-docx、numpy、lxml 等；任务运行时不会临时安装依赖。
+Linux 使用 `node scripts/prepare-python.mjs /usr/bin/python3.12`，在目标系统重新创建环境，不复制 Windows 虚拟环境。
 
-脚本默认在插件目录创建 `.venv`，插件会自动使用其中的 Python，**无需填写 `pythonPath`**。如果不知道基础 Python 路径，安装了 Windows Python Launcher 时可执行：
+### 3. 安装并启动
 
-```powershell
-py -3.12 -c "import sys; print(sys.executable)"
-```
+在 DSH 网页的 **插件 → 添加插件** 中选择发布目录 `artifacts/release/dsh-functional-logic-completion-v2-1/`，安装并启用，按提示重启 DSH。选择的目录应直接包含 `package.json`。本地目录安装后不要移动或删除该目录。
 
-Linux 使用相同发布包，先准备 Python 3.12 的 venv/ensurepip 支持，在发布目录执行：
+**默认不用手改 YAML。** 插件使用自身 `.venv`、PATH 中的 Java 和 `tools/plantuml.jar`，最多检查 5 轮，并发为 1。
 
-```bash
-node scripts/prepare-python.mjs /usr/bin/python3.12
-```
+只有自定义环境时，才修改当前 profile 对应插件 `functional-logic-completion-v2-1` 的 `config`：
 
-同样默认使用插件目录的 `.venv`，无需修改配置。基础 Python 路径按实际位置调整，不将 Windows 虚拟环境复制到 Linux。
+| 可选配置 | 用途 |
+|---|---|
+| `pythonPath` | 外部虚拟环境的解释器绝对路径 |
+| `javaPath` | Java 可执行文件绝对路径或 PATH 名称，默认 `java` |
+| `plantumlJarPath` | 外部 PlantUML JAR 的绝对路径 |
+| `maxIterations` / `maxConcurrent` | 检查轮次 / 并发上限，默认 5 / 1 |
 
-### 3. 在 DSH 中安装
+配置保存后重启。不要复制旧插件的 ID 来覆盖新版条目，无需修改 HugeGraph 或填写 Tool 允许名单。
 
-1. 打开 DSH 网页，进入侧栏 **插件 → 添加插件**。
-2. 输入 Runtime 的完整目录路径，按提示安装并启用。
-3. 同样安装并启用“需求功能逻辑补全”。
-4. 保持默认配置，根据管理器提示重启 DSH。
-
-两个插件应安装到同一套 DSH 运行配置中（profile），即在同一个 DSH 网页所管理的配置环境中安装。使用本地目录安装时，应保留安装目录及其位置。
-
-如果浏览器与 DSH 分别运行在两台电脑上，安装路径指 **DSH 所在电脑** 的路径，浏览器不会上传本机目录。
-
-### 4. 配置（默认无需修改）
-
-按上面的步骤准备 Python 后，直接使用默认配置即可，**不需要手改 YAML，也不需要填写 `pythonPath`**。默认使用插件目录下的 `.venv`，最多检查 5 轮，同时运行 1 个任务；模型在 DSH 中选择。
-
-仅在需要自定义时，修改当前 DSH profile 的 `cordis.patch.yml` 中对应插件条目的 `config`，保存后重启 DSH：
-
-- 虚拟环境放在其他目录：设置 Req 的 `pythonPath` 为该环境解释器的绝对路径。
-- 调整轮次或并发：设置 Req 的 `maxIterations` 或 `maxConcurrent`。
-- 调整超时：设置 Runtime 的 `defaultTimeoutMs` 或 `modelTimeoutMs`。
-
-SDK 随本插件打包，Runtime 插件仍需单独安装。插件启用且 Python 检查通过后自动登记入口，无需填写 Tool 允许名单或修改 HugeGraph。
-
-### 5. 日常启动
-
-**只启动 DSH，不需要手动启动 Python、worker.py 或 Gradio，也无需每次运行环境准备脚本。** 插件启用时检查 Python，每次任务自动启动自己的 Python 进程。
-
-如果使用 DSH 源码部署，在已经完成自身依赖准备的 **DSH 主项目目录** 执行：
-
-```powershell
-Set-Location 'D:\work\DSH-Softwarefactory'
-pnpm.cmd dsh web
-```
-
-路径替换为本机 DSH 主项目位置，不是在本插件目录运行。若使用已部署的 DSH 服务，沿用其正常启动方式。Windows 上使用 `pnpm.cmd` 可以避免 PowerShell 的 `.ps1` 执行策略问题。
-
-插件安装成功、Python 环境检查通过和真实业务任务成功是三项独立检查。环境探测不证明工作区可写，下面的入口查询也不会执行完整算法。
+日常只启动 DSH，不手动启动 worker.py 或 Gradio。源码部署的 DSH 在其主项目目录运行 `pnpm.cmd dsh web`，不是在本插件目录运行。
 
 ## 使用
 
-在 DSH 网页选择一个可写工作区，进入普通聊天。
+先在普通聊天检查入口：
 
-### 检查安装
+> 请调用 sf_runtime_get_tool_contract，参数为 {"toolId":"sf_functional_logic_completion_v2_1"}，只检查接口。
 
-向 DSH 发送：
-
-> 请调用 sf_runtime_get_tool_contract，参数为 {"toolId":"sf_functional_logic_completion_v2_0"}。仅检查接口，不启动任务。
-
-返回 `supportsRun: true` 表示入口可由 Run 调用。这一步不执行补全算法。
-
-### 启动任务
-
-要求 DSH 调用 `sf_runtime_run_tool`，使用以下参数，并将示例需求替换为实际内容：
+通过 `sf_runtime_run_tool` 启动：
 
 ```json
 {
-  "toolId": "sf_functional_logic_completion_v2_0",
-  "input": {
-    "software_intro": "图书借阅系统：管理员维护图书，读者借阅和归还图书，并查询自己的借阅记录。"
-  },
+  "toolId": "sf_functional_logic_completion_v2_1",
+  "input": {"software_intro": "商品系统：管理员增加、删除、修改、查看商品。增加商品时录入信息、校验并保存。"},
   "timeoutMs": 3600000
 }
 ```
 
-`software_intro` 为必填需求文本，不可为空，最多 100000 字符。成功受理后返回 `runId`；完整补全需要调用模型，可能耗时较长。
+`software_intro` 必填，非空且不超过 100000 字符。模型默认继承发起聊天；也可在启动请求顶层传入 `model: {provider, model}`，使用 DSH 已配置的实际 ID。任务模型固定，主聊天模型不切换，Python 不持有密钥。
 
-任务开始时显示“启动准备，0%”，随后显示实际阶段及估算百分比。启动准备占 0–2%，初始分析占 2–38%，迭代补全按配置的迭代上限分配 38–78%，需求正文占 78–92%，图文生成占 92–98%，打包登记占 98–100%。百分比不倒退；提前收敛或跳过可选步骤时会向前跳，等待单次模型响应时保持当前值。
+任务返回 `runId`；用 `sf_runtime_get_run` 查询，`sf_runtime_wait_run` 等待，`sf_runtime_cancel_run` 取消，文件通过 `sf_runtime_get_artifact` 获取下载引用。最终文件 ID 在结果的 `result.files` 中。
 
-百分比表示流程进度估算，不代表模型计算量、剩余时间或需求完整程度。100% 表示插件完成文档和材料登记；任务最终是否成功仍以 Run 的状态为准。
-
-Python 由 DSH 作为受信任的服务端后端托管，使用 DSH 服务账户已有的权限，不额外建立文件沙箱或修改目录 ACL。每次任务都由实际 Python 子进程写入任务输入，成功后才确认启动准备完成；健康检查通过不代表任务目录可写。`probeTimeoutMs` 同时控制环境检查和 Python 启动确认超时，默认为 15000 毫秒。
-
-默认使用发起聊天的模型。如需内部使用另一模型，在启动参数顶层增加 `model: {"provider":"实际提供方ID","model":"实际模型ID"}`。模型必须已在 DSH 中配置。任务启动后模型保持固定，主聊天模型不会被切换。
-
-### 查看结果或取消任务
-
-将下面参数中的 ID 替换为任务返回的实际值：
-
-| 操作 | Tool | 参数 |
-|---|---|---|
-| 查看状态和结果 | `sf_runtime_get_run` | `{"runId":"任务ID"}` |
-| 等待任务更新 | `sf_runtime_wait_run` | `{"runId":"任务ID","waitMs":15000}` |
-| 获取文件下载链接 | `sf_runtime_get_artifact` | `{"runId":"任务ID","artifactId":"文件ID"}` |
-| 取消任务 | `sf_runtime_cancel_run` | `{"runId":"任务ID"}` |
-
-文件 ID 从任务结果的 `result.files` 中获取。所有业务执行均通过 Run 发起，不直接调用业务 Tool。
-
-## 交付文件
+## 输出
 
 | 文件 | 内容 |
 |---|---|
-| `requirements.docx` | 补全后的软件需求说明书 |
-| `checks.zip` | 输入、实体与用例、E-R/CRUD、每轮检查和快照、PlantUML、日志等检查材料 |
-| `result.json` | 结构化结果、迭代次数及收敛情况 |
+| `requirements.docx` | 原需求内容、分层功能说明、系统总览及每个分组的用例图、每个末级子功能的活动图；图片插入对应章节 |
+| `functional-tree.json` | 功能编号、名称、说明、参与者和父子结构 |
+| `diagrams.zip` | PNG 图片、原始 `.puml`、功能树与图索引 |
+| `checks.zip` | 输入、实体、用例、E-R/CRUD、每轮状态、模型请求响应及日志等检查材料 |
+| `result.json` | 结构化结果、功能树、图文件对应关系与收敛状态 |
 
-文件保存在发起聊天所属工作区：
+所有文件保存在发起聊天工作区的 `outputs/runs/<runId>/`，最终文件在 `final/`，初始和新增材料在 `intermediate/`，逐轮快照在 `snapshots/`。失败和取消时保留已完成材料。
 
-```text
-<工作区>/outputs/runs/<runId>/
-```
+每个非叶分组各生成一张用例图，展示直属子功能；系统总览展示顶层大功能。每个叶子节点生成一张活动图。功能树最多四层、160 个节点；图越多，模型请求和渲染工作越多。进度按阶段及已完成图片数量估算，不是剩余时间。
 
-最终文件位于 `final/`，中间材料位于 `intermediate/` 和 `snapshots/`。失败或取消后保留已有材料，任务结束不会自动删除文件。
+PlantUML 源码直接由 AI 生成并保存，不剥离代码围栏、不改写源码、不自动调用模型修图。格式错误或渲染失败明确报告对应节点，不将缺图文档登记为成功产物。原 v2.0 导出保存在中间材料中；只有全部新版步骤完成才登记最终交付。
 
-文档生成成功与算法收敛分别记录。收敛不代表需求已经完整或正确，正式使用前仍应审阅文档。
-
-## 常见问题
-
-| 问题 | 处理方法 |
-|---|---|
-| 找不到 Runtime 工具 | 确认 Runtime 已在当前 DSH 配置环境安装并加载 |
-| `PROTOCOL_UNSUPPORTED` | 确认 Req 已加载、Python 检查通过，入口名填写正确且当前会话可见 |
-| 旧的 `TOOL_NOT_ALLOWED` | 检查是否仍加载旧 Runtime，更新后重启 DSH；当前版本无需允许名单 |
-| `WORKSPACE_REQUIRED` | 选择真实工作区后再发起任务 |
-| `MODEL_REQUIRED` / `MODEL_UNAVAILABLE` | 检查 DSH 模型配置或启动参数中的模型 ID |
-| Python 环境错误 | 检查 `pythonPath`，并重新运行环境准备脚本 |
-| `READ_ONLY` | 将发起会话切换为具有工作区写入许可的模式 |
-| `PYTHON_START_TIMEOUT` | Python 未及时确认任务目录写入；检查解释器与目录权限，必要时调整 `probeTimeoutMs` |
-| 任务目录写入被拒绝 | 检查 DSH 服务账户对工作区的现有写入权限；插件不自动提权或修改 ACL |
+程序完成、DOCX 生成和 CRUD 方法收敛分别记录，收敛不代表需求完整正确。Python 使用受信任的受管后端及应用层路径检查，不提供额外的操作系统级文件沙箱隔离。
 
 ## 从源码构建
 
-Git 仓库不包含 `lib/`、`artifacts/`、`node_modules/`、虚拟环境、测试产物和本地 Skill。刚克隆的源码不能直接作为已构建插件安装。
-
-需要一份兼容、已按 DSH 自身说明准备好依赖的 DSH 源码。当前构建脚本复用其构建依赖，SDK TGZ 保留在本仓库的 `vendor/`。在本插件源码目录执行：
+需要依赖已准备好的兼容 DSH 源码，脚本复用其构建工具。SDK TGZ 已保留在 `vendor/`。
 
 ```powershell
-Set-Location 'D:\work\DSH-Functional-Logic-Completion-Plugin'
 $env:DSH_SOURCE = 'D:\work\DSH-Softwarefactory'
-node .\scripts\build.mjs
-node .\scripts\pack.mjs
+node scripts/build.mjs
+node scripts/pack.mjs
 ```
 
-路径按实际位置修改；未设置 `DSH_SOURCE` 时默认寻找相邻的 `DSH-Softwarefactory` 目录。无需在本插件执行通用的 `npm install` 来代替上述构建流程。
+从 Git 克隆源码时，如缺少 `tools/plantuml.jar`，先按 `tools/README.md` 获取对应官方文件；打包脚本会拒绝缺少 JAR 的发布包。
 
-完成后使用 `artifacts/release/dsh-functional-logic-completion/`，按前面的步骤准备 Python、安装及配置。构建和打包不会替你安装 Runtime，也不会创建 Python 环境。
+安装目录为 `artifacts/release/dsh-functional-logic-completion-v2-1/`，TGZ 为 `artifacts/deepseek-ai-dsh-functional-logic-completion-v2-1-0.3.0.tgz`。PlantUML JAR 及其许可证已随包提供；Java、Python 虚拟环境、Skill 和任务文件不随包发布。在实际安装目录创建虚拟环境即可，无需手动复制 JAR。
 
-## 升级
+轻量检查：`node scripts/typecheck.mjs`、`node --experimental-transform-types --test tests/progress.test.ts tests/run-entry.test.ts`、`.venv\Scripts\python.exe -B tests/python_smoke.py` 和 `.venv\Scripts\python.exe -B tests/v21_output_smoke.py`。后者需要本地 Java/JAR，仅运行小型模拟输入，不运行完整补全或真实模型。
 
-使用 DSH 插件管理器更新发布包，并按提示重启。安装包不包含虚拟环境，升级时可继续使用单独配置的 Python 环境。
+安装不等于 Python/Java 环境就绪；环境探测不等于真实任务完成。出现缺少 JAR、模型不可用、只读会话、目录写入失败或图源码错误时，按任务报告处理，不会静默跳过或提升权限。
+
+## 修复记录
+
+修复原补全流程生成基础文档后，在“整理原始补全结果”阶段失败的问题。修复不改变补全算法、Tool 名称、输入输出及数据库绑定；已有失败任务和材料保持原样。新增离线回归检查覆盖文档生成后的产物通知。

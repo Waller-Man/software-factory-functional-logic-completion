@@ -1,0 +1,20 @@
+{
+  "tree": {
+    "systemName": "商品系统",
+    "actors": ["管理员"],
+    "functions": [{"id":"F001","name":"商品增加","description":"管理员增加商品，包含录入与保存。","actors":["管理员"],"children":[
+      {"id":"F001_01","name":"录入商品信息","description":"录入商品名称、价格，检查必填项。","actors":["管理员"],"children":[]},
+      {"id":"F001_02","name":"保存商品","description":"保存已校验的商品信息，反馈保存结果。","actors":["管理员"],"children":[]}
+    ]}]
+  },
+  "core": {
+    "software_intro":"商品系统：管理员录入并保存商品。",
+    "data_entities":["商品"],"use_cases":["商品增加"],
+    "use_case_description":"管理员录入名称和价格，校验后保存，展示保存结果。",
+    "er_model":"商品包含名称、价格。","crud_triples":[],
+    "functional_requirements":"FR-01 商品增加：录入并校验名称和价格，保存商品并反馈结果。",
+    "external_interface":"提供商品录入界面。","nonfunctional_requirements":"明确显示校验与保存结果。",
+    "iterations":1,"check_count":1,"converged":false,"reached_iteration_limit":false,
+    "execution_status":"succeeded","document_status":"pending","convergence_status":"iteration_limit"
+  }
+}

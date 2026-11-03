@@ -8,13 +8,15 @@ import {CompletionRuntime} from './runtime.ts';
 import {TOOL, INPUT_SCHEMA, CompletionError, type Options, type Input} from './contracts.ts';
 
 declare module '@deepseek-ai/cordis' {
-  interface Context {functionalLogicCompletion: FunctionalLogicCompletion}
+  interface Context {functionalLogicCompletionV21: FunctionalLogicCompletionV21}
 }
 
-export default class FunctionalLogicCompletion extends Service {
+export default class FunctionalLogicCompletionV21 extends Service {
   static inject = ['tools', 'sfRuntime', 'subprocess', 'sandboxPolicy'];
   static Config = z.object({
     pythonPath: z.string().default('').description('服务端独立虚拟环境的 Python 解释器绝对路径；空值使用插件 .venv。'),
+    javaPath: z.string().default('java').description('本地 Java 21 解释器路径或 PATH 名称。'),
+    plantumlJarPath: z.string().default('').description('PlantUML JAR 绝对路径；空值使用插件 tools/plantuml.jar。'),
     maxIterations: z.number().step(1).min(1).max(20).default(5),
     maxConcurrent: z.number().step(1).min(1).max(16).default(1),
     probeTimeoutMs: z.number().step(1).min(1000).max(120000).default(15000),
@@ -24,7 +26,7 @@ export default class FunctionalLogicCompletion extends Service {
   });
 
   constructor(ctx: Context, private readonly options: Options) {
-    super(ctx, 'functionalLogicCompletion');
+    super(ctx, 'functionalLogicCompletionV21');
   }
 
   async *[Service.init]() {
@@ -52,7 +54,7 @@ export default class FunctionalLogicCompletion extends Service {
     });
     registerRunTool<Input>(this.ctx, {
       toolId: TOOL,
-      description: '通过软件工厂 Run 执行 ReqCompleter v2.0。输入 software_intro 自然语言需求，交付需求说明书 DOCX、检查材料 ZIP 和结构化结果；保留逐轮材料。方法收敛不代表需求内容已经完整正确。请通过 sf_runtime_run_tool 启动。',
+      description: '通过软件工厂 Run 执行 ReqCompleter v2.1。输入 software_intro 自然语言需求，交付含分层功能、各层用例图和叶子活动图的 DOCX、功能树、图文件 ZIP、检查材料和结构化结果；保留逐轮材料。方法收敛不代表需求内容已经完整正确。请通过 sf_runtime_run_tool 启动。',
       inputSchema: INPUT_SCHEMA,
       execute: (input, execution) => runtime.run(input, execution, callers.getStore()),
     });

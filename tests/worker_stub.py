@@ -5,15 +5,15 @@ from pathlib import Path
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "python"))
-import worker
-import reqcompleter_v2_0.pipeline as pipeline
+import worker_v2_1 as worker
+import reqcompleter_v2_1.pipeline as pipeline
 from reqcompleter_v2_0.protocol import read_message
 from docx import Document
 import io
 
 
 class StubPipeline:
-    def __init__(self, client, store, max_iterations):
+    def __init__(self, client, store, max_iterations, **kwargs):
         self.client, self.store = client, store
 
     def run(self, intro):
@@ -39,6 +39,8 @@ class StubPipeline:
         document.save(content)
         self.store.write_bytes("final/requirements.docx", content.getvalue())
         self.store.write_json("iterations/001/after.json", {"synthetic_test": True})
+        self.store.write_json("final/functional-tree.json", {"synthetic_test": True})
+        self.store.write_bytes("final/diagrams.zip", b"synthetic archive")
         result = {"synthetic_test": True, "iterations": 1, "converged": False,
                   "reached_iteration_limit": False, "docx_path": "final/requirements.docx"}
         self.store.write_json("final/result.json", result)
