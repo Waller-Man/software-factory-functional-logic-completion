@@ -54,8 +54,11 @@ class Pipeline:
         # The core converges exactly as before; the following steps only change delivery.
         tree = generate_tree(self.client, self.store, result)
         diagrams = generate_diagrams(self.client, self.store, self.renderer, tree, software_intro)
+        failures = [entry for entry in diagrams if entry["status"] == "skipped"]
         result.update({"business_version": BUSINESS_VERSION, "adapter_version": ADAPTER_VERSION,
-                       "functional_tree": tree, "diagrams": diagrams, "diagram_status": "generated",
+                       "functional_tree": tree, "diagrams": diagrams,
+                       "diagram_status": "partial" if failures else "generated",
+                       "diagram_failures": failures,
                        "document_status": "pending"})
         self.store.write_json("final/functional-tree.json", tree)
         self.client.set_step("save_docx")
@@ -64,13 +67,27 @@ class Pipeline:
         archive = io.BytesIO()
         with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as package:
             package.write(self.store.path("final/functional-tree.json"), "functional-tree.json")
-            package.writestr("index.json", json.dumps([
-                {**entry, **{key: entry[key].removeprefix("intermediate/v2_1/diagrams/")
-                            for key in ("source", "image")}} for entry in diagrams
-            ], ensure_ascii=False, indent=2))
+            archive_entries = []
             for entry in diagrams:
+                archived = {**entry}
                 for key in ("source", "image"):
-                    relative = entry[key]
+                    if key in archived:
+                        archived[key] = archived[key].removeprefix("intermediate/v2_1/diagrams/")
+                archived["attempts"] = [{**attempt, **{
+                    key: attempt[key].removeprefix("intermediate/v2_1/diagrams/")
+                    for key in ("source", "errorPath") if key in attempt
+                }} for attempt in entry["attempts"]]
+                archive_entries.append(archived)
+            package.writestr("index.json", json.dumps(archive_entries, ensure_ascii=False, indent=2))
+            for entry in diagrams:
+                paths = [entry["source"]]
+                if entry.get("image"):
+                    paths.append(entry["image"])
+                for attempt in entry["attempts"]:
+                    paths.append(attempt["source"])
+                    if attempt.get("errorPath"):
+                        paths.append(attempt["errorPath"])
+                for relative in paths:
                     package.write(self.store.path(relative), relative.removeprefix("intermediate/v2_1/diagrams/"))
         self.store.write_bytes("final/diagrams.zip", archive.getvalue())
         result["files"] = sorted(self.store.files | {"final/result.json"})

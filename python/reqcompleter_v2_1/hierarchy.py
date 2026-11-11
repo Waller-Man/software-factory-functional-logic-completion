@@ -101,17 +101,45 @@ def generate_diagrams(client, store, renderer, tree, software_intro):
             prompt = (instruction + "只返回从 @startuml 到 @enduml 的一份完整源码，标记各自独占一行；不要解释、Markdown 代码围栏、include、图片或外部资源。\n"
                       + "采用本地 Smetana 布局，不需要 Graphviz。\nNODE_ID:" + node["id"] + "\n"
                       + json.dumps(context, ensure_ascii=False))
-            raw = client.complete("V21Diagrams", prompt)
             folder = "use-cases" if kind == "use-case" else "activities"
             prefix = f"intermediate/v2_1/diagrams/{folder}/{node['id']}"
-            # Save the exact AI source before rendering, including on failure.
-            store.write_text(prefix + ".puml", raw)
-            try:
-                source, image = renderer.render(raw, store, prefix)
-            except TaskError as error:
-                raise TaskError(error.code, f"{node['id']} {node['name']}：{error}") from error
-            entries.append({"kind": kind, "nodeId": node["id"], "parentId": parent_id,
-                            "level": level, "name": node["name"], "source": source, "image": image})
+            entry = {"kind": kind, "nodeId": node["id"], "parentId": parent_id,
+                     "level": level, "name": node["name"], "source": prefix + ".puml",
+                     "status": "skipped", "attempts": []}
+            attempt_prompt = prompt
+            # Initial generation plus at most two model-assisted corrections.
+            for attempt in range(1, 4):
+                raw = client.complete("V21Diagrams", attempt_prompt)
+                attempt_source = f"{prefix}.attempt-{attempt:02d}.puml"
+                store.write_text(attempt_source, raw)
+                store.write_text(prefix + ".puml", raw)
+                record = {"attempt": attempt, "source": attempt_source}
+                entry["attempts"].append(record)
+                try:
+                    source, image = renderer.render(raw, store, prefix)
+                except TaskError as error:
+                    # Model/service errors, cancellation and environment failures stay fatal.
+                    if error.code not in {"INVALID_DIAGRAM", "DIAGRAM_RENDER_FAILED", "DIAGRAM_RENDER_TIMEOUT"}:
+                        raise TaskError(error.code, f"{node['id']} {node['name']}：{error}") from error
+                    problem = {"code": error.code, "message": str(error)}
+                    error_path = f"{prefix}.attempt-{attempt:02d}.error.json"
+                    record.update({"status": "failed", "error": problem, "errorPath": error_path})
+                    entry["error"] = problem
+                    store.write_json(error_path, {"nodeId": node["id"], "name": node["name"], **record})
+                    client.emit("artifact", path=error_path, kind="diagram_error")
+                    message = (f"{node['name']}：{error.code}，正在重新请求（{attempt}/2）。"
+                               if attempt < 3 else f"{node['name']}：三次尝试均失败，跳过本图并保留功能文字。")
+                    client.emit("step", step=stage, status="running", completed=index,
+                                total=len(selected), nodeName=node["name"], message=message)
+                    attempt_prompt = (prompt + "\n上次图源码校验或渲染失败，请针对下列错误修正当前图。"
+                                      "只返回一份完整源码，必须以 @startuml 开始、以 @enduml 结束。\n"
+                                      + json.dumps({"previousSource": raw, "error": problem}, ensure_ascii=False))
+                else:
+                    record["status"] = "generated"
+                    entry.update({"status": "generated", "source": source, "image": image})
+                    entry.pop("error", None)
+                    break
+            entries.append(entry)
             store.write_json("intermediate/v2_1/diagram-index.json", entries)
             client.emit("step", step=stage, status="running", completed=index + 1,
                         total=len(selected), nodeName=node["name"])

@@ -20,7 +20,7 @@ const runtimeSource = resolve(process.env.SF_RUNTIME_SOURCE ?? join(root, '../re
 const {default: Runtime} = await import(pathToFileURL(join(runtimeSource, 'lib/index.js')).href);
 const TOOL = 'sf_functional_logic_completion_v2_1';
 
-async function fixture(options: {mode?: 'read-only' | 'workspace-write'; stallStartup?: boolean; illustrated?: boolean} = {}) {
+async function fixture(options: {mode?: 'read-only' | 'workspace-write'; stallStartup?: boolean; illustrated?: boolean; missingDiagram?: boolean} = {}) {
   const ctx = new Context();
   const results = join(root, 'test-results'); await mkdir(results, {recursive: true});
   const workspace = await mkdtemp(join(process.env.REQ_ENTRY_TEST_PARENT ?? results, 'run-entry-'));
@@ -71,6 +71,9 @@ else (no)
 endif
 stop
 @enduml`;
+      }
+      if (options.missingDiagram && request.messages.some(message => JSON.stringify(message).includes('NODE_ID:F001_01'))) {
+        text = text.replace(/\n@enduml$/, '');
       }
       yield {type: 'text-delta' as const, index: 0, text};
       yield {type: 'usage' as const, usage: {inputTokens: 3, outputTokens: 2}};
@@ -242,5 +245,29 @@ test('v2.1 native Run: isolated mock model, real local images and coexistence wi
   assert.equal(manifest.businessVersion, 'v2.1');
   assert.equal(manifest.diagramCount, 4);
   assert.equal(manifest.model.provider, 'mock-B');
+  assert.equal(run.progress, 100);
+});
+
+test('v2.1 native Run: exhausted diagram retries still deliver DOCX with an explicit warning', {timeout: 45000}, async t => {
+  const f = await fixture({illustrated: true, missingDiagram: true}); t.after(() => f.ctx.fiber.dispose());
+  const accepted = await f.call('run_tool', {toolId: TOOL, input: {software_intro: '商品录入与保存。'}});
+  const run = await f.finish(accepted.runId);
+  assert.equal(run.status, 'completed', JSON.stringify(run));
+  assert.match(run.result.text, /DOCX 已生成，部分图缺失/);
+  assert.ok(run.issues.some((issue: any) => issue.level === 'warning' && issue.code === 'DIAGRAMS_PARTIAL'));
+  assert.equal(f.requests.length, 7, 'One failed image gets only two further model calls');
+  assert.equal(run.result.files.length, 5);
+  const directory = join(f.workspace, 'outputs/runs', run.runId);
+  const result = JSON.parse(await readFile(join(directory, 'final/result.json'), 'utf8'));
+  assert.equal(result.diagram_status, 'partial');
+  assert.equal(result.diagram_failures.length, 1);
+  assert.equal(result.diagram_failures[0].attempts.length, 3);
+  const manifest = JSON.parse(await readFile(join(directory, 'manifest.json'), 'utf8'));
+  assert.equal(manifest.documentStatus, 'generated');
+  assert.equal(manifest.diagramStatus, 'partial');
+  assert.equal(manifest.diagramCount, 3);
+  assert.equal(manifest.diagramMissingCount, 1);
+  assert.equal(manifest.diagramTotal, 4);
+  assert.ok(run.artifacts.some((a: any) => a.relativePath.endsWith('F001_01.attempt-03.error.json')));
   assert.equal(run.progress, 100);
 });

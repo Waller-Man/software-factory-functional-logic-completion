@@ -114,11 +114,15 @@ export class CompletionRuntime {
       if (result.docx_path !== 'final/requirements.docx' || !(await stat(join(directory, result.docx_path))).size) {
         throw new CompletionError('DOCX_FAILED', 'Python 未生成有效的非空需求文档。');
       }
+      const diagramEntries = Array.isArray(result.diagrams) ? result.diagrams : [];
+      const missingDiagrams = diagramEntries.filter(entry => entry.status === 'skipped').length;
+      const generatedDiagrams = diagramEntries.length - missingDiagrams;
       Object.assign(manifest, {
         executionStatus: 'succeeded', documentStatus: 'generated',
         convergenceStatus: result.converged ? 'converged' : 'not_converged',
         iterations: result.iterations, reachedIterationLimit: result.reached_iteration_limit,
-        diagramStatus: result.diagram_status, diagramCount: Array.isArray(result.diagrams) ? result.diagrams.length : 0,
+        diagramStatus: result.diagram_status, diagramCount: generatedDiagrams,
+        diagramMissingCount: missingDiagrams, diagramTotal: diagramEntries.length,
         finishedAt: new Date().toISOString(),
       });
       await atomicJson(join(directory, 'manifest.json'), manifest);
@@ -132,10 +136,16 @@ export class CompletionRuntime {
         const file = await execution.addArtifact({kind: 'final', name, relativePath: 'final/' + name, mime: mime(name)});
         files.push(file.artifactId);
       }
-      const text = `含分层功能及用例／活动图的需求说明书已生成；检查轮次 ${result.iterations}，${result.converged ? '方法判定收敛' : '方法未判定收敛'}，${result.reached_iteration_limit ? '已达到迭代上限' : '未达到迭代上限'}。收敛不代表需求内容已经完整正确。`;
+      const diagramNotice = missingDiagrams
+        ? `DOCX 已生成，部分图缺失（已生成 ${generatedDiagrams} 张，缺失 ${missingDiagrams} 张）；`
+        : '含分层功能及用例／活动图的需求说明书已生成；';
+      if (missingDiagrams) await execution.reportIssue({level: 'warning', code: 'DIAGRAMS_PARTIAL',
+        stage: 'publishing', message: diagramNotice + '缺图章节已注明，失败源码及错误记录已保留。'});
+      const text = `${diagramNotice}检查轮次 ${result.iterations}，${result.converged ? '方法判定收敛' : '方法未判定收敛'}，${result.reached_iteration_limit ? '已达到迭代上限' : '未达到迭代上限'}。收敛不代表需求内容已经完整正确。`;
       await execution.log(text, 'publishing');
       await execution.reportProgress({stage: 'completed', stageName: '交付完成', progress: estimate.finish(),
-        message: '文档及检查材料已登记；最终任务是否成功以 Run 状态为准。'});
+        message: missingDiagrams ? 'DOCX 已生成，部分图缺失；文档及检查材料已登记。'
+          : '文档及检查材料已登记；最终任务是否成功以 Run 状态为准。'});
       return {text, files};
     } catch (error) {
       Object.assign(manifest, {
@@ -247,9 +257,10 @@ export class CompletionRuntime {
           await execution.reportProgress({stage: event.step, stageName: stageNames[event.step] ?? event.step,
             progress: estimate.advance(event.step, event.status, round, event.converged === true,
               typeof event.completed === 'number' ? event.completed : 0, typeof event.total === 'number' ? event.total : 0),
-            message: event.step === 'starting' && event.status === 'completed'
-              ? 'Python 已接收任务并完成目录写入检查（估算进度）。'
-              : `${typeof event.total === 'number' ? `已完成 ${event.completed ?? 0}/${event.total} 张；${event.nodeName ?? ''} ` : ''}${round ? `第 ${round} 轮：` : ''}${event.status === 'completed' ? '阶段完成' : '正在处理'}（估算进度）`});
+            message: typeof event.message === 'string' ? event.message
+              : event.step === 'starting' && event.status === 'completed'
+                ? 'Python 已接收任务并完成目录写入检查（估算进度）。'
+                : `${typeof event.total === 'number' ? `已处理 ${event.completed ?? 0}/${event.total} 张；${event.nodeName ?? ''} ` : ''}${round ? `第 ${round} 轮：` : ''}${event.status === 'completed' ? '阶段完成' : '正在处理'}（估算进度）`});
           await registerMaterials();
         } else if (event.type === 'artifact') {
           // Final files are registered only after successful worker exit.

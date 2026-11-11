@@ -4,7 +4,7 @@ DSH 后端插件，通过软件工厂 Run 执行需求补全，将功能拆成�
 
 | 项目 | 值 |
 |---|---|
-| 插件包 | `@deepseek-ai/dsh-functional-logic-completion-v2-1`，0.3.0 |
+| 插件包 | `@deepseek-ai/dsh-functional-logic-completion-v2-1`，0.3.1 |
 | 插件显示名称 | 需求功能逻辑补全 v2.1 |
 | 业务版本 | ReqCompleter v2.1 |
 | 执行入口 | `sf_functional_logic_completion_v2_1` |
@@ -93,7 +93,9 @@ Linux 使用 `node scripts/prepare-python.mjs /usr/bin/python3.12`，在目标�
 
 每个非叶分组各生成一张用例图，展示直属子功能；系统总览展示顶层大功能。每个叶子节点生成一张活动图。功能树最多四层、160 个节点；图越多，模型请求和渲染工作越多。进度按阶段及已完成图片数量估算，不是剩余时间。
 
-PlantUML 源码直接由 AI 生成并保存，不剥离代码围栏、不改写源码、不自动调用模型修图。格式错误或渲染失败明确报告对应节点，不将缺图文档登记为成功产物。原 v2.0 导出保存在中间材料中；只有全部新版步骤完成才登记最终交付。
+PlantUML 源码由 AI 生成并原样保存，不剥离代码围栏或自动改写。单张图源码校验或渲染失败后，会携带具体错误重新请求模型，最多重试两次（共三次尝试）；仍失败则跳过该图，保留功能文字，在 DOCX 对应位置注明“本节图未生成”，继续生成其他图和文档。模型调用失败、取消、环境不可用及文件写入错误仍会终止任务。
+
+每次尝试的 `.attempt-01.puml` 等源码、失败时的 `.attempt-01.error.json` 和图索引保存在 `intermediate/v2_1/diagrams/` 对应图目录，随检查材料和图文件 ZIP 一并交付。缺图时最终摘要明确提示“DOCX 已生成，部分图缺失”，`result.json` 的 `diagram_status` 为 `partial`，`diagram_failures` 列出缺失节点；manifest 分别记录已生成、缺失和总图数。DOCX 生成成功不代表全部图成功。原 v2.0 导出仍保存在中间材料中。
 
 程序完成、DOCX 生成和 CRUD 方法收敛分别记录，收敛不代表需求完整正确。Python 使用受信任的受管后端及应用层路径检查，不提供额外的操作系统级文件沙箱隔离。
 
@@ -109,11 +111,11 @@ node scripts/pack.mjs
 
 从 Git 克隆源码时，如缺少 `tools/plantuml.jar`，先按 `tools/README.md` 获取对应官方文件；打包脚本会拒绝缺少 JAR 的发布包。
 
-安装目录为 `artifacts/release/dsh-functional-logic-completion-v2-1/`，TGZ 为 `artifacts/deepseek-ai-dsh-functional-logic-completion-v2-1-0.3.0.tgz`。PlantUML JAR 及其许可证已随包提供；Java、Python 虚拟环境、Skill 和任务文件不随包发布。在实际安装目录创建虚拟环境即可，无需手动复制 JAR。
+安装目录为 `artifacts/release/dsh-functional-logic-completion-v2-1/`，TGZ 为 `artifacts/deepseek-ai-dsh-functional-logic-completion-v2-1-0.3.1.tgz`。PlantUML JAR 及其许可证已随包提供；Java、Python 虚拟环境、Skill 和任务文件不随包发布。在实际安装目录创建虚拟环境即可，无需手动复制 JAR。
 
 轻量检查：`node scripts/typecheck.mjs`、`node --experimental-transform-types --test tests/progress.test.ts tests/run-entry.test.ts`、`.venv\Scripts\python.exe -B tests/python_smoke.py` 和 `.venv\Scripts\python.exe -B tests/v21_output_smoke.py`。后者需要本地 Java/JAR，仅运行小型模拟输入，不运行完整补全或真实模型。
 
-安装不等于 Python/Java 环境就绪；环境探测不等于真实任务完成。出现缺少 JAR、模型不可用、只读会话、目录写入失败或图源码错误时，按任务报告处理，不会静默跳过或提升权限。
+安装不等于 Python/Java 环境就绪；环境探测不等于真实任务完成。缺少 JAR、模型不可用、只读会话或目录写入失败时，按任务报告处理，不会提升权限。图源码校验或渲染失败按上述有限重试和缺图交付规则处理，不会静默省略。
 
 ## 修复记录
 

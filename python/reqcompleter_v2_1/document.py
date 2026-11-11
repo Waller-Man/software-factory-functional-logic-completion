@@ -23,6 +23,8 @@ def save_document(store, result):
     document.add_paragraph("ReqCompleter v2.1 · 分层功能与用例／活动图")
     if not result["converged"]:
         document.add_paragraph("本需求说明书为待复核稿：功能逻辑检查尚未判定收敛。")
+    if result.get("diagram_failures"):
+        document.add_paragraph(f"本文档部分图缺失，共 {len(result['diagram_failures'])} 张；对应章节已注明。")
 
     def paragraphs(content):
         for line in str(content).splitlines():
@@ -30,6 +32,9 @@ def save_document(store, result):
                 document.add_paragraph(line)
 
     def picture(entry):
+        if entry["status"] == "skipped":
+            document.add_paragraph("本节图未生成。功能文字说明予以保留。")
+            return
         image = store.path(entry["image"])
         data = image.read_bytes()
         width, height = struct.unpack(">II", data[16:24])

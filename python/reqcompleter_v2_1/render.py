@@ -56,10 +56,18 @@ class PlantUML:
         store.write_text(source_path, source)
         # No fence stripping, code rewriting, template diagram or model repair loop.
         lines = source.strip().splitlines()
-        if (not lines or lines[0].strip() != "@startuml" or lines[-1].strip() != "@enduml"
-                or sum(line.strip().startswith("@start") for line in lines) != 1
-                or sum(line.strip().startswith("@end") for line in lines) != 1):
-            raise TaskError("INVALID_DIAGRAM", f"{source_path} 必须只包含一份完整 PlantUML 源码。")
+        problems = []
+        if not lines or lines[0].strip() != "@startuml":
+            problems.append("首行必须独占一行写 @startuml，不能带代码围栏或解释")
+        if not lines or lines[-1].strip() != "@enduml":
+            problems.append("末行缺少独占一行的 @enduml，或其后存在多余内容")
+        starts = sum(line.strip().startswith("@start") for line in lines)
+        ends = sum(line.strip().startswith("@end") for line in lines)
+        if starts != 1 or ends != 1:
+            problems.append(f"开始标记 {starts} 个，结束标记 {ends} 个；各应为 1 个")
+        if problems:
+            raise TaskError("INVALID_DIAGRAM", f"{source_path} 必须只包含一份完整 PlantUML 源码："
+                            + "；".join(problems))
         output = self.execute(["-charset", "UTF-8", "-tpng", "-pipe", "-failfast2", "-noerror",
                                "-Playout=smetana"], source.encode("utf-8"))
         if len(output) < 24 or output[:8] != b"\x89PNG\r\n\x1a\n" or not all(struct.unpack(">II", output[16:24])):

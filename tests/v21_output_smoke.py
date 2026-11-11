@@ -13,9 +13,9 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "python"))
 from docx import Document
 from reqcompleter_v2_0.pipeline import Pipeline as Core, save_document as save_core_document
-from reqcompleter_v2_0.protocol import ModelClient, TaskError
+from reqcompleter_v2_0.protocol import ModelClient, TaskError, Cancelled
 from reqcompleter_v2_0.storage import TaskStore
-from reqcompleter_v2_1.hierarchy import validate_tree
+from reqcompleter_v2_1.hierarchy import validate_tree, generate_diagrams
 from reqcompleter_v2_1.pipeline import Pipeline, CoreClient, CoreStore
 from reqcompleter_v2_1.render import PlantUML
 from worker_v21_output import synthetic_core
@@ -89,6 +89,85 @@ class OutputSmoke(unittest.TestCase):
         with self.assertRaises(TaskError):
             renderer.render("@startuml\nthis is definitely invalid diagram syntax !!!\n@enduml", store, "intermediate/invalid/syntax")
         self.assertFalse((store.root / "intermediate/invalid/syntax.png").exists())
+
+
+class DiagramTolerance(unittest.TestCase):
+    def run_sample(self, replies):
+        store = TaskStore(ROOT / "test-results" / ("v21-tolerance-" + uuid4().hex))
+        responses = "".join(json.dumps({"type": "model_response", "id": f"m{i:06d}",
+                                       "result": {"text": text}}, ensure_ascii=False) + "\n"
+                            for i, text in enumerate([json.dumps(FIXTURE["tree"], ensure_ascii=False), *replies], 1))
+        output = io.StringIO()
+        client = ModelClient("v21-tolerance", store, io.StringIO(responses), output)
+        with patch.object(Core, "run", synthetic_core):
+            result = Pipeline(client, store).run(FIXTURE["core"]["software_intro"])
+        return result, store, [json.loads(line) for line in output.getvalue().splitlines()]
+
+    def test_format_and_render_errors_corrected_with_original_attempts_retained(self):
+        missing_end = ACTIVITY.removesuffix("\n@enduml")
+        bad_syntax = "@startuml\nthis is definitely invalid diagram syntax !!!\n@enduml"
+        result, store, events = self.run_sample([USE_CASE, USE_CASE, missing_end, bad_syntax, ACTIVITY, ACTIVITY])
+        self.assertEqual(result["diagram_status"], "generated")
+        self.assertEqual(result["diagram_failures"], [])
+        entry = next(e for e in result["diagrams"] if e["nodeId"] == "F001_01")
+        self.assertEqual(len(entry["attempts"]), 3)
+        self.assertEqual([a["status"] for a in entry["attempts"]], ["failed", "failed", "generated"])
+        self.assertEqual(store.path(entry["attempts"][0]["source"]).read_text(encoding="utf-8"), missing_end)
+        requests = [e for e in events if e["type"] == "model_request"]
+        self.assertEqual(len(requests), 7)
+        self.assertIn("末行缺少", requests[4]["messages"][1]["content"])
+        self.assertIn("DIAGRAM_RENDER_FAILED", requests[5]["messages"][1]["content"])
+        self.assertIn("previousSource", requests[4]["messages"][1]["content"])
+        self.assertEqual(len(Document(store.path(result["docx_path"])).inline_shapes), 4)
+        for attempt in entry["attempts"][:2]:
+            self.assertTrue(store.path(attempt["errorPath"]).is_file())
+
+    def test_exhausted_system_and_leaf_diagrams_skipped_but_later_images_docx_and_zip_complete(self):
+        invalid = ACTIVITY.removesuffix("\n@enduml")
+        result, store, events = self.run_sample([invalid] * 3 + [USE_CASE] + [invalid] * 3 + [ACTIVITY])
+        self.assertEqual(result["diagram_status"], "partial")
+        self.assertEqual(result["document_status"], "succeeded")
+        self.assertEqual([e["nodeId"] for e in result["diagram_failures"]], ["SYSTEM", "F001_01"])
+        self.assertTrue(all(len(e["attempts"]) == 3 for e in result["diagram_failures"]))
+        self.assertEqual(len([e for e in events if e["type"] == "model_request"]), 9)
+        self.assertEqual(result["diagrams"][-1]["status"], "generated")
+        document = Document(store.path(result["docx_path"]))
+        self.assertEqual(len(document.inline_shapes), 2)
+        text = "\n".join(p.text for p in document.paragraphs)
+        self.assertEqual(text.count("本节图未生成"), 2)
+        self.assertIn("录入商品名称、价格，检查必填项。", text)
+        self.assertIn("部分图缺失", text)
+        with zipfile.ZipFile(store.path("final/diagrams.zip")) as package:
+            for entry in json.loads(package.read("index.json")):
+                self.assertIn(entry["source"], package.namelist())
+                if entry["status"] == "skipped":
+                    self.assertNotIn("image", entry)
+                else:
+                    self.assertIn(entry["image"], package.namelist())
+                for attempt in entry["attempts"]:
+                    self.assertIn(attempt["source"], package.namelist())
+                    if attempt.get("errorPath"):
+                        self.assertIn(attempt["errorPath"], package.namelist())
+
+    def test_model_cancellation_is_not_retried_or_skipped(self):
+        from unittest.mock import Mock
+        client = Mock()
+        client.complete.side_effect = Cancelled()
+        store = TaskStore(ROOT / "test-results" / ("v21-cancel-" + uuid4().hex))
+        with self.assertRaises(Cancelled):
+            generate_diagrams(client, store, PlantUML(), FIXTURE["tree"], "small input")
+        self.assertEqual(client.complete.call_count, 1)
+
+    def test_environment_failure_is_not_retried_or_skipped(self):
+        from unittest.mock import Mock
+        client, renderer = Mock(), Mock()
+        client.complete.return_value = USE_CASE
+        renderer.render.side_effect = TaskError("JAVA_NOT_READY", "Java unavailable")
+        store = TaskStore(ROOT / "test-results" / ("v21-environment-" + uuid4().hex))
+        with self.assertRaises(TaskError) as caught:
+            generate_diagrams(client, store, renderer, FIXTURE["tree"], "small input")
+        self.assertEqual(caught.exception.code, "JAVA_NOT_READY")
+        self.assertEqual(client.complete.call_count, 1)
 
 
 if __name__ == "__main__":

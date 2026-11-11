@@ -1,6 +1,6 @@
 {
   "name": "@deepseek-ai/dsh-functional-logic-completion-v2-1",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": true,
   "type": "module",
   "description": "需求功能逻辑补全 v2.1 — 分层功能、用例图和活动图的 Run 后端插件",
