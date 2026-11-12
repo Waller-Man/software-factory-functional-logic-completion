@@ -13,6 +13,8 @@ import {CompletionError, errorCode, PACKAGE_VERSION, TOOL, type Input, type Opti
 import {jsonLines, send, workerEvent, type WorkerFinal} from './protocol.ts';
 import {REQCOMPLETER_V2_1 as VERSION} from './versions/reqcompleter-v2_1.ts';
 import {ProgressEstimate} from './progress.ts';
+import {callJsonModel} from './json-model.ts';
+import type {ModelConnection} from '@software-factory/runtime-sdk';
 
 const packageRoot = fileURLToPath(new URL('../', import.meta.url));
 const pythonEnv = {PYTHONDONTWRITEBYTECODE: '1', PYTHONUNBUFFERED: '1', PYTHONUTF8: '1', PYTHONNOUSERSITE: '1'};
@@ -94,7 +96,7 @@ export class CompletionRuntime {
       runId: execution.runId, toolId: TOOL, packageVersion: PACKAGE_VERSION,
       businessVersion: VERSION.businessVersion, implementationVersion: VERSION.implementationVersion,
       sourceSha256: VERSION.sourceSha256, model: execution.model.selection ?? null,
-      parameters: {maxIterations: this.options.maxIterations, javaPath: this.javaPath, plantumlJarPath: this.paths.plantumlJar}, startedAt: new Date().toISOString(),
+      parameters: {functionTreeResponseFormat: 'json_object', maxIterations: this.options.maxIterations, javaPath: this.javaPath, plantumlJarPath: this.paths.plantumlJar}, startedAt: new Date().toISOString(),
     };
     let directoryValidated = false;
     try {
@@ -108,8 +110,11 @@ export class CompletionRuntime {
       await execution.reportProgress({stage: 'starting', stageName: '启动准备', progress: estimate.advance('starting'),
         message: '正在启动 Python 并检查任务目录写入。'});
       await execution.log('ReqCompleter v2.1 开始执行；模型和任务目录由 Run 固定。', 'starting');
+      await this.initialize();
+      signal.throwIfAborted();
+      const jsonConnection = await execution.model.getConnection({protocol: 'openai-completions'});
       const registerMaterials = () => this.materials(execution, indexed);
-      const result = await this.worker(input, execution, signal, registerMaterials, estimate);
+      const result = await this.worker(input, execution, signal, registerMaterials, estimate, jsonConnection);
       signal.throwIfAborted();
       if (result.docx_path !== 'final/requirements.docx' || !(await stat(join(directory, result.docx_path))).size) {
         throw new CompletionError('DOCX_FAILED', 'Python 未生成有效的非空需求文档。');
@@ -185,7 +190,7 @@ export class CompletionRuntime {
 
   private async worker(input: Readonly<Input>, execution: ExecutionContext,
     signal: AbortSignal,
-    registerMaterials: () => Promise<void>, estimate: ProgressEstimate): Promise<WorkerFinal> {
+    registerMaterials: () => Promise<void>, estimate: ProgressEstimate, jsonConnection: ModelConnection): Promise<WorkerFinal> {
     const argv = [this.paths.python, '-B', '-u', this.paths.worker];
     let handle: SubprocessHandle | undefined;
     let stopping: Promise<void> | undefined;
@@ -245,7 +250,9 @@ export class CompletionRuntime {
           requests.add(event.id);
           await registerMaterials();
           try {
-            const answer = await execution.model.call({messages: event.messages});
+            const answer = event.module === 'V21Hierarchy'
+              ? await callJsonModel(jsonConnection, event.messages, runningSignal)
+              : await execution.model.call({messages: event.messages});
             await send(process.stdin, {type: 'model_response', protocolVersion: 1, runId: execution.runId, id: event.id, result: {text: answer.text}}, this.options.maxProtocolBytes);
           } catch (error) {
             await send(process.stdin, {type: 'model_response', protocolVersion: 1, runId: execution.runId, id: event.id,

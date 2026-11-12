@@ -63,12 +63,29 @@ def generate_tree(client, store, result):
 {"systemName":"系统名称","actors":["管理员"],"functions":[{"id":"F001","name":"商品增加","description":"说明","actors":["管理员"],"children":[{"id":"F001_01","name":"录入商品信息","description":"说明","actors":["管理员"],"children":[]}]}]}
 已补全的需求：
 """ + json.dumps(context, ensure_ascii=False)
-    raw = client.complete("V21Hierarchy", prompt)
-    store.write_text("intermediate/v2_1/function-tree.raw.txt", raw)
-    try:
-        tree = validate_tree(json.loads(raw))
-    except json.JSONDecodeError as error:
-        raise TaskError("INVALID_FUNCTION_TREE", "AI 未返回纯 JSON 功能树，原始响应已保留。") from error
+    attempt_prompt = prompt
+    for attempt in range(1, 4):
+        raw = client.complete("V21Hierarchy", attempt_prompt)
+        store.write_text("intermediate/v2_1/function-tree.raw.txt", raw)
+        prefix = f"intermediate/v2_1/function-tree.attempt-{attempt:02d}"
+        store.write_text(prefix + ".raw.txt", raw)
+        try:
+            tree = validate_tree(json.loads(raw))
+        except (json.JSONDecodeError, TaskError) as error:
+            if isinstance(error, TaskError) and error.code != "INVALID_FUNCTION_TREE":
+                raise
+            detail = (f"JSON 语法错误：{error.msg}；第 {error.lineno} 行第 {error.colno} 列，字符位置 {error.pos}。"
+                      if isinstance(error, json.JSONDecodeError) else str(error))
+            store.write_json(prefix + ".error.json", {"attempt": attempt, "code": "INVALID_FUNCTION_TREE", "message": detail})
+            client.emit("artifact", path=prefix + ".error.json", kind="function_tree_error")
+            if attempt == 3:
+                raise TaskError("INVALID_FUNCTION_TREE", "功能树三次生成均未通过校验：" + detail) from error
+            client.emit("step", step="functional_hierarchy", status="running",
+                        message=f"功能树未通过校验，正在重新请求（{attempt}/2）：{detail}")
+            attempt_prompt = (prompt + "\n上次功能树未通过校验，请修正以下错误，仅返回完整 JSON 对象，不要解释或代码围栏。\n"
+                              + json.dumps({"error": detail, "previousResponse": raw}, ensure_ascii=False))
+        else:
+            break
     store.write_json("intermediate/v2_1/functional-tree.json", tree)
     client.emit("step", step="functional_hierarchy", status="completed")
     return tree

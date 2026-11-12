@@ -1,6 +1,6 @@
 {
   "name": "@deepseek-ai/dsh-functional-logic-completion-v2-1",
-  "version": "0.3.1",
+  "version": "0.3.3",
   "private": true,
   "type": "module",
   "description": "需求功能逻辑补全 v2.1 — 分层功能、用例图和活动图的 Run 后端插件",
@@ -10,7 +10,8 @@
     "./package.json": "./package.json",
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./locale/*.json": "./locale/*.json",
-    "./icon": "./icon.svg"
+    "./icon": "./icon.svg",
+    "./client": "./client.js"
   },
   "files": [
     "lib",
@@ -26,11 +27,21 @@
     "tools/plantuml.jar",
     "tools/plantuml-LICENSE.txt",
     "tools/plantuml-NOTICE.md",
-    "tools/plantuml-licenses"
+    "tools/plantuml-licenses",
+    "client.js"
   ],
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-ui-plugin-manager"
+      ]
     }
   },
   "peerDependencies": {
@@ -39,7 +50,8 @@
     "@deepseek-ai/dsh-tools": "0.2.1-alpha.2",
     "@deepseek-ai/dsh-agent": "0.2.1-alpha.2",
     "@deepseek-ai/dsh-sandbox-policy": "0.2.1-alpha.2",
-    "@deepseek-ai/dsh-subprocess": "0.2.1-alpha.2"
+    "@deepseek-ai/dsh-subprocess": "0.2.1-alpha.2",
+    "@deepseek-ai/dsh-settings": "0.2.1-alpha.2"
   },
   "scripts": {
     "build": "node scripts/build.mjs",
@@ -52,6 +64,6 @@
     "node": ">=24"
   },
   "devDependencies": {
-    "@software-factory/runtime-sdk": "file:vendor/software-factory-runtime-sdk-0.1.0.tgz"
+    "@software-factory/runtime-sdk": "file:vendor/software-factory-runtime-sdk-0.3.0.tgz"
   }
 }

@@ -1,5 +1,7 @@
 /** Small native Run checks. Synthetic algorithm/model; no profile installation. */
 import test from 'node:test';
+import {createServer} from 'node:http';
+import WebServer from '@deepseek-ai/dsh-host-webserver';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {mkdir, mkdtemp, readFile, stat} from 'node:fs/promises';
@@ -20,14 +22,14 @@ const runtimeSource = resolve(process.env.SF_RUNTIME_SOURCE ?? join(root, '../re
 const {default: Runtime} = await import(pathToFileURL(join(runtimeSource, 'lib/index.js')).href);
 const TOOL = 'sf_functional_logic_completion_v2_1';
 
-async function fixture(options: {mode?: 'read-only' | 'workspace-write'; stallStartup?: boolean; illustrated?: boolean; missingDiagram?: boolean} = {}) {
+async function fixture(options: {mode?: 'read-only' | 'workspace-write'; stallStartup?: boolean; illustrated?: boolean; missingDiagram?: boolean; jsonGateway?: string} = {}) {
   const ctx = new Context();
   const results = join(root, 'test-results'); await mkdir(results, {recursive: true});
   const workspace = await mkdtemp(join(process.env.REQ_ENTRY_TEST_PARENT ?? results, 'run-entry-'));
   await mountAgentLoopTestDependencies(ctx, {workingDirectory: true});
   const harness = await mountAgentLoopTestHarness(ctx);
   const agent = await harness.create(SessionId('req-entry-' + randomUUID()),
-    {provider: 'mock-A', model: 'mock'}, {cwd: workspace});
+    {provider: 'mock-a', model: 'mock'}, {cwd: workspace});
   await ctx.plugin(Registry);
   await ctx.plugin(SubprocessLocal);
   await ctx.plugin(SandboxPolicy, {mode: options.mode ?? 'workspace-write'});
@@ -52,8 +54,8 @@ async function fixture(options: {mode?: 'read-only' | 'workspace-write'; stallSt
       const fixture = JSON.parse(await readFile(join(root, 'tests/v21-fixture.json'), 'utf8'));
       let text = 'synthetic reply';
       if (options.illustrated) {
-        text = requests.length === 1 ? JSON.stringify(fixture.tree)
-          : requests.length <= 3
+        text = JSON.stringify(request.messages).includes('TASK:FUNCTION_TREE') ? JSON.stringify(fixture.tree)
+          : JSON.stringify(request.messages).includes('TASK:USE_CASE')
             ? `@startuml
 actor Admin
 rectangle Products {
@@ -80,8 +82,27 @@ stop
       yield {type: 'finish' as const, reason: {kind: 'stop' as const}};
     }
   }
-  ctx.llm.registerAdapter(['mock-A', 'mock-B'], new MockModel());
+  ctx.llm.registerAdapter(['mock-a', 'mock-b'], new MockModel());
   await ctx.plugin(Runtime, {allowedToolIds: [TOOL], defaultTimeoutMs: 15000});
+  let gatewayOrigin = options.jsonGateway;
+  if (!gatewayOrigin) {
+    const server = createServer(async (_req, res) => {
+      const data = JSON.parse(await readFile(join(root, 'tests/v21-fixture.json'), 'utf8'));
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({choices: [{finish_reason: 'stop', message: {content: JSON.stringify(data.tree)}}]}));
+    });
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+    gatewayOrigin = `http://127.0.0.1:${(server.address() as any).port}`;
+    ctx.effect(() => () => new Promise<void>(resolve => {server.closeAllConnections(); server.close(() => resolve());}));
+  }
+  {
+    ctx.provide('settings', {configure: () => () => {}, describe: () => [{ns: 'synthetic-connections', value: {
+      api: 'openai-completions', baseURL: gatewayOrigin + '/v1', models: [{id: 'mock'}],
+    }}]} as never);
+    ctx.provide('credentials', {resolve: async () => ({value: 'synthetic-provider-token'}), readRecord: async () => ({kind: 'api-key', key: 'synthetic-provider-token'})} as never);
+    ctx.llm.registerConfigurableProviders(['mock-a', 'mock-b'].map(provider => ({provider, displayName: 'Synthetic', settingsNs: 'synthetic-connections', settingsPath: []})));
+    await ctx.plugin(WebServer, {host: '127.0.0.1', port: 0, compression: 'none'});
+  }
   const plugin = await ctx.plugin(Plugin, options.stallStartup ? {probeTimeoutMs: 6000} : {});
   async function call(action: string, args: object) {
     const result = await ctx.tools.execute({name: 'sf_runtime_' + action, arguments: args,
@@ -92,7 +113,7 @@ stop
   }
   async function finish(runId: string) {
     let seq = 0;
-    for (let round = 0; round < 100; round++) {
+    for (let round = 0; round < 500; round++) {
       const update = await call('wait_run', {runId, afterSeq: seq, waitMs: 200});
       seq = update.lastSeq;
       if (['completed', 'failed', 'cancelled', 'interrupted'].includes(update.run.status)) return call('get_run', {runId});
@@ -154,10 +175,10 @@ test('built SDK entry: native Run, fake model, real small DOCX and artifact IDs'
   assert.equal(direct.isError, true, 'Direct calls must not bypass Run');
   for (const specified of [false, true]) {
     const accepted = await f.call('run_tool', {toolId: TOOL, input: {software_intro: 'synthetic_test'},
-      ...(specified ? {model: {provider: 'mock-B', model: 'mock'}} : {})});
+      ...(specified ? {model: {provider: 'mock-b', model: 'mock'}} : {})});
     const run = await f.finish(accepted.runId);
     assert.equal(run.status, 'completed', JSON.stringify(run));
-    assert.equal(run.model.provider, specified ? 'mock-B' : 'mock-A');
+    assert.equal(run.model.provider, specified ? 'mock-b' : 'mock-a');
     const directory = join(f.workspace, 'outputs/runs', run.runId);
     const stored = JSON.parse(await readFile(join(directory, 'run.json'), 'utf8'));
     const stages = stored.events.filter((event: any) => event.type === 'progress').map((event: any) => event.data);
@@ -188,7 +209,7 @@ test('built SDK entry: native Run, fake model, real small DOCX and artifact IDs'
     const manifest = JSON.parse(await readFile(join(directory, 'manifest.json'), 'utf8'));
     assert.equal(manifest.model.provider, run.model.provider);
     assert.equal(manifest.convergenceStatus, 'not_converged', 'File generation must not imply convergence');
-    assert.equal(f.agent.options.provider, 'mock-A');
+    assert.equal(f.agent.options.provider, 'mock-a');
   }
   assert.equal(f.requests.length, 2, 'Only one synthetic model call per task');
   assert.ok(f.requests.every(r => r.sessionId?.startsWith('sf-run-model-')));
@@ -222,14 +243,15 @@ test('v2.1 native Run: isolated mock model, real local images and coexistence wi
   for (const toolId of [TOOL, 'sf_functional_logic_completion_v2_0']) {
     const contract = await f.call('get_tool_contract', {toolId});
     assert.equal(contract.supportsRun, true);
+    if (toolId === TOOL) assert.deepEqual(contract.modelProtocols, ['openai-completions']);
   }
   const accepted = await f.call('run_tool', {toolId: TOOL,
-    input: {software_intro: '管理员增加商品，录入并保存信息。'}, model: {provider: 'mock-B', model: 'mock'}});
+    input: {software_intro: '管理员增加商品，录入并保存信息。'}, model: {provider: 'mock-b', model: 'mock'}});
   const run = await f.finish(accepted.runId);
   assert.equal(run.status, 'completed', JSON.stringify(run));
-  assert.equal(run.model.provider, 'mock-B');
-  assert.equal(f.agent.options.provider, 'mock-A');
-  assert.equal(f.requests.length, 5);
+  assert.equal(run.model.provider, 'mock-b');
+  assert.equal(f.agent.options.provider, 'mock-a');
+  assert.equal(f.requests.length, 4, 'The function tree always uses the JSON gateway');
   assert.ok(f.requests.every(request => request.sessionId?.startsWith('sf-run-model-')));
   assert.equal(run.result.files.length, 5);
   const directory = join(f.workspace, 'outputs/runs', run.runId);
@@ -244,7 +266,7 @@ test('v2.1 native Run: isolated mock model, real local images and coexistence wi
   const manifest = JSON.parse(await readFile(join(directory, 'manifest.json'), 'utf8'));
   assert.equal(manifest.businessVersion, 'v2.1');
   assert.equal(manifest.diagramCount, 4);
-  assert.equal(manifest.model.provider, 'mock-B');
+  assert.equal(manifest.model.provider, 'mock-b');
   assert.equal(run.progress, 100);
 });
 
@@ -255,7 +277,7 @@ test('v2.1 native Run: exhausted diagram retries still deliver DOCX with an expl
   assert.equal(run.status, 'completed', JSON.stringify(run));
   assert.match(run.result.text, /DOCX 已生成，部分图缺失/);
   assert.ok(run.issues.some((issue: any) => issue.level === 'warning' && issue.code === 'DIAGRAMS_PARTIAL'));
-  assert.equal(f.requests.length, 7, 'One failed image gets only two further model calls');
+  assert.equal(f.requests.length, 6, 'One failed image gets only two further model calls; tree uses JSON gateway');
   assert.equal(run.result.files.length, 5);
   const directory = join(f.workspace, 'outputs/runs', run.runId);
   const result = JSON.parse(await readFile(join(directory, 'final/result.json'), 'utf8'));
@@ -270,4 +292,32 @@ test('v2.1 native Run: exhausted diagram retries still deliver DOCX with an expl
   assert.equal(manifest.diagramTotal, 4);
   assert.ok(run.artifacts.some((a: any) => a.relativePath.endsWith('F001_01.attempt-03.error.json')));
   assert.equal(run.progress, 100);
+});
+
+test('v2.1 JSON gateway: malformed tree retries through Runtime and secrets stay outside Python', {timeout: 45000}, async t => {
+  const jsonBodies: any[] = [];
+  const server = createServer(async (req, res) => {
+    let raw = ''; for await (const chunk of req) raw += chunk;
+    const body = JSON.parse(raw); jsonBodies.push(body);
+    const fixture = JSON.parse(await readFile(join(root, 'tests/v21-fixture.json'), 'utf8'));
+    res.setHeader('content-type', 'application/json');
+    res.end(JSON.stringify({choices: [{finish_reason: 'stop', message: {content: jsonBodies.length === 1 ? '{"functions":[}' : JSON.stringify(fixture.tree)}}], usage: {prompt_tokens: 2, completion_tokens: 3}}));
+  });
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise<void>(resolve => {server.closeAllConnections(); server.close(() => resolve());}));
+  const f = await fixture({illustrated: true, jsonGateway: `http://127.0.0.1:${(server.address() as any).port}`});
+  t.after(() => f.ctx.fiber.dispose());
+  const accepted = await f.call('run_tool', {toolId: TOOL, input: {software_intro: '管理员录入并保存商品。'}});
+  const run = await f.finish(accepted.runId);
+  assert.equal(run.status, 'completed', JSON.stringify(run));
+  assert.equal(jsonBodies.length, 2); assert.equal(f.requests.length, 4);
+  assert.ok(jsonBodies.every(body => body.model === 'mock' && body.response_format.type === 'json_object'));
+  assert.match(jsonBodies[1].messages[1].content, /字符位置/);
+  assert.equal(run.modelCalls.filter((call: any) => call.protocol === 'openai-completions').length, 2);
+  const directory = join(f.workspace, 'outputs/runs', run.runId);
+  assert.ok((await stat(join(directory, 'intermediate/v2_1/function-tree.attempt-01.error.json'))).isFile());
+  const input = await readFile(join(directory, 'input/reqcompleter-request.json'), 'utf8');
+  assert.ok(!input.includes('apiKey') && !input.includes('sf-run-'));
+  const stored = await readFile(join(directory, 'run.json'), 'utf8');
+  assert.ok(!stored.includes('synthetic-provider-token'));
 });

@@ -4,7 +4,7 @@ DSH 后端插件，通过软件工厂 Run 执行需求补全，将功能拆成�
 
 | 项目 | 值 |
 |---|---|
-| 插件包 | `@deepseek-ai/dsh-functional-logic-completion-v2-1`，0.3.1 |
+| 插件包 | `@deepseek-ai/dsh-functional-logic-completion-v2-1`，0.3.3 |
 | 插件显示名称 | 需求功能逻辑补全 v2.1 |
 | 业务版本 | ReqCompleter v2.1 |
 | 执行入口 | `sf_functional_logic_completion_v2_1` |
@@ -19,7 +19,7 @@ DSH 后端插件，通过软件工厂 Run 执行需求补全，将功能拆成�
 ### 1. 准备环境
 
 - 兼容的 DSH 0.2.1-alpha.2、Node.js 24+。
-- 在同一 DSH profile 中安装并启用软件工厂 Runtime 0.1.0；SDK 已随本插件打包，Runtime 仍需单独安装。
+- 在同一 DSH profile 中安装并启用软件工厂 Runtime 0.3.0；SDK 已随本插件打包，Runtime 仍需单独安装。
 - Python 3.12，支持 venv/pip。
 - Java 21，`java` 已加入 PATH。
 - **发布包已包含 PlantUML 1.2026.9，位于 `tools/plantuml.jar`，无需另行下载、复制或配置。** 许可证和来源说明一并提供。
@@ -44,18 +44,20 @@ Linux 使用 `node scripts/prepare-python.mjs /usr/bin/python3.12`，在目标�
 
 在 DSH 网页的 **插件 → 添加插件** 中选择发布目录 `artifacts/release/dsh-functional-logic-completion-v2-1/`，安装并启用，按提示重启 DSH。选择的目录应直接包含 `package.json`。本地目录安装后不要移动或删除该目录。
 
-**默认不用手改 YAML。** 插件使用自身 `.venv`、PATH 中的 Java 和 `tools/plantuml.jar`，最多检查 5 轮，并发为 1。
+进入 **插件 → 需求功能逻辑补全 v2.1 → 包含的组件 → 配置**，填写并保存。默认无需修改；不要求编辑 YAML 或 `.env`。
 
-只有自定义环境时，才修改当前 profile 对应插件 `functional-logic-completion-v2-1` 的 `config`：
-
-| 可选配置 | 用途 |
+| 表单字段 | 默认与用途 |
 |---|---|
-| `pythonPath` | 外部虚拟环境的解释器绝对路径 |
-| `javaPath` | Java 可执行文件绝对路径或 PATH 名称，默认 `java` |
-| `plantumlJarPath` | 外部 PlantUML JAR 的绝对路径 |
-| `maxIterations` / `maxConcurrent` | 检查轮次 / 并发上限，默认 5 / 1 |
+| Python 解释器 | 留空使用本插件 `.venv`；自定义时填写服务端绝对路径 |
+| Java | 默认 `java`，也可填写服务端可执行文件路径 |
+| PlantUML JAR | 留空使用随包 `tools/plantuml.jar` |
+| 最大检查轮次／并发任务数 | 默认 5／1 |
 
-配置保存后重启。不要复制旧插件的 ID 来覆盖新版条目，无需修改 HugeGraph 或填写 Tool 允许名单。
+保存无需重启，仅影响之后启动的任务；运行中的任务使用启动时固定的配置。任务启动时检查 Python、Java 和 JAR，插件能启用不代表环境已经就绪。时限在软件工厂 Runtime 插件自己的原生配置页面设置。模型及凭据仍由 DSH 管理，不填写额外 API Key；JSON 网关的临时令牌仅留在 TS 内存中，不传给 Python。
+
+功能树固定使用 SDK 0.3.0 网关的 `response_format: {type: "json_object"}`，没有模式开关。执行入口声明 `openai-completions` 协议；须在 DSH 选择支持 JSON 输出的 Chat Completions 连接，不兼容时明确报错，不自动回退。用例图和活动图仍按 PlantUML 文本生成。
+
+功能树 JSON 解析或结构校验失败时，将具体错误反馈给模型，最多重试两次。每次原始响应和错误都保留；三次失败仍终止任务，不能用错误功能树继续绘图。图源码的重试与缺图交付规则保持不变。
 
 日常只启动 DSH，不手动启动 worker.py 或 Gradio。源码部署的 DSH 在其主项目目录运行 `pnpm.cmd dsh web`，不是在本插件目录运行。
 
@@ -111,7 +113,7 @@ node scripts/pack.mjs
 
 从 Git 克隆源码时，如缺少 `tools/plantuml.jar`，先按 `tools/README.md` 获取对应官方文件；打包脚本会拒绝缺少 JAR 的发布包。
 
-安装目录为 `artifacts/release/dsh-functional-logic-completion-v2-1/`，TGZ 为 `artifacts/deepseek-ai-dsh-functional-logic-completion-v2-1-0.3.1.tgz`。PlantUML JAR 及其许可证已随包提供；Java、Python 虚拟环境、Skill 和任务文件不随包发布。在实际安装目录创建虚拟环境即可，无需手动复制 JAR。
+安装目录为 `artifacts/release/dsh-functional-logic-completion-v2-1/`，TGZ 为 `artifacts/deepseek-ai-dsh-functional-logic-completion-v2-1-0.3.3.tgz`。PlantUML JAR 及其许可证已随包提供；Java、Python 虚拟环境、Skill 和任务文件不随包发布。在实际安装目录创建虚拟环境即可，无需手动复制 JAR。
 
 轻量检查：`node scripts/typecheck.mjs`、`node --experimental-transform-types --test tests/progress.test.ts tests/run-entry.test.ts`、`.venv\Scripts\python.exe -B tests/python_smoke.py` 和 `.venv\Scripts\python.exe -B tests/v21_output_smoke.py`。后者需要本地 Java/JAR，仅运行小型模拟输入，不运行完整补全或真实模型。
 
