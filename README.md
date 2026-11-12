@@ -4,7 +4,7 @@
 
 | 项目 | 说明 |
 |---|---|
-| 插件版本 | 0.2.3 |
+| 插件版本 | 0.2.4 |
 | 算法版本 | ReqCompleter v2.0 |
 | 输入 | 自然语言软件需求 |
 | 输出 | DOCX 需求说明书、检查材料 ZIP、结构化 JSON |
@@ -14,7 +14,7 @@
 以下环境应准备在运行 DSH 的电脑上：
 
 - DSH 0.2.1-alpha.2，Node.js 24 或以上版本。
-- 软件工厂 Runtime 0.1.0（提供 Run 任务服务）。
+- 软件工厂 Runtime 0.3.0（提供 Run 任务服务）。
 - Python 3.12，使用独立虚拟环境；完整依赖见 `requirements/requirements-py312.lock.txt`。
 - DSH 中已配置可用模型，并有一个可写的工作区。
 
@@ -35,7 +35,7 @@ D:\DSH-plugins\dsh-functional-logic-completion\
 
 **两个目录可以放在不同磁盘或文件夹中，无需相邻。** 每个安装目录应直接包含 `package.json` 和 `cordis.patch.yml`。使用 TGZ 包时，先解压，再选择其中符合上述条件的目录。
 
-本插件发布目录为 `artifacts/release/dsh-functional-logic-completion/`，安装包为 `artifacts/deepseek-ai-dsh-functional-logic-completion-0.2.3.tgz`。新电脑使用发布包即可，无需重新构建或单独安装 SDK。
+本插件发布目录为 `artifacts/release/dsh-functional-logic-completion/`，安装包为 `artifacts/deepseek-ai-dsh-functional-logic-completion-0.2.4.tgz`。新电脑使用发布包即可，无需重新构建或单独安装 SDK。
 
 ### 2. 准备 Python 环境
 
@@ -79,17 +79,18 @@ node scripts/prepare-python.mjs /usr/bin/python3.12
 
 按上面的步骤准备 Python 后，直接使用默认配置即可，**不需要手改 YAML，也不需要填写 `pythonPath`**。默认使用插件目录下的 `.venv`，最多检查 5 轮，同时运行 1 个任务；模型在 DSH 中选择。
 
-仅在需要自定义时，修改当前 DSH profile 的 `cordis.patch.yml` 中对应插件条目的 `config`，保存后重启 DSH：
+需要自定义时，进入 **插件 → 需求功能逻辑补全 → 包含的组件 → 配置**：
 
-- 虚拟环境放在其他目录：设置 Req 的 `pythonPath` 为该环境解释器的绝对路径。
-- 调整轮次或并发：设置 Req 的 `maxIterations` 或 `maxConcurrent`。
-- 调整超时：设置 Runtime 的 `defaultTimeoutMs` 或 `modelTimeoutMs`。
+- Python 解释器：留空使用本插件 `.venv`，外部环境填写服务端解释器绝对路径。
+- 最大检查轮次／并发任务数：默认 5／1。
 
-SDK 随本插件打包，Runtime 插件仍需单独安装。插件启用且 Python 检查通过后自动登记入口，无需填写 Tool 允许名单或修改 HugeGraph。
+通过 DSH 原生表单保存，无需编辑 YAML 或 `.env`。保存无需重启，仅影响新任务；运行中的任务保留启动时固定的配置。时限在 Runtime 0.3.0 插件的原生配置页面设置。
+
+SDK 0.3.0 随本插件打包，Runtime 0.3.0 插件仍需单独安装。启用后登记入口，在任务启动时检查 Python 环境；无需填写 Tool 允许名单或修改 HugeGraph。V2.0 保持原来的模型调用和补全算法，没有 V2.1 的功能树 JSON 生成阶段。
 
 ### 5. 日常启动
 
-**只启动 DSH，不需要手动启动 Python、worker.py 或 Gradio，也无需每次运行环境准备脚本。** 插件启用时检查 Python，每次任务自动启动自己的 Python 进程。
+**只启动 DSH，不需要手动启动 Python、worker.py 或 Gradio，也无需每次运行环境准备脚本。** 每次任务启动时检查 Python 并启动自己的 Python 进程。
 
 如果使用 DSH 源码部署，在已经完成自身依赖准备的 **DSH 主项目目录** 执行：
 

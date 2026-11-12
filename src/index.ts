@@ -1,6 +1,7 @@
 /** Host-only ReqCompleter entry. Run owns tasks, models, queries and downloads. */
 import {Service, type Context} from '@deepseek-ai/cordis';
-import z from '@deepseek-ai/schemastery';
+import type {} from '@deepseek-ai/dsh-settings';
+import {Config, snapshotOptions, type LiveOptions} from './config.ts';
 import {AsyncLocalStorage} from 'node:async_hooks';
 import type {Agent} from '@deepseek-ai/dsh-agent';
 import {registerRunTool} from '@software-factory/runtime-sdk';
@@ -13,24 +14,18 @@ declare module '@deepseek-ai/cordis' {
 
 export default class FunctionalLogicCompletion extends Service {
   static inject = ['tools', 'sfRuntime', 'subprocess', 'sandboxPolicy'];
-  static Config = z.object({
-    pythonPath: z.string().default('').description('服务端独立虚拟环境的 Python 解释器绝对路径；空值使用插件 .venv。'),
-    maxIterations: z.number().step(1).min(1).max(20).default(5),
-    maxConcurrent: z.number().step(1).min(1).max(16).default(1),
-    probeTimeoutMs: z.number().step(1).min(1000).max(120000).default(15000),
-    graceMs: z.number().step(1).min(100).max(30000).default(3000),
-    maxProtocolBytes: z.number().step(1).min(4096).max(8388608).default(8388608),
-    maxLogBytes: z.number().step(1).min(4096).max(268435456).default(16777216),
-  });
+  static Config = Config;
 
-  constructor(ctx: Context, private readonly options: Options) {
+  constructor(ctx: Context, private readonly options: LiveOptions) {
     super(ctx, 'functionalLogicCompletion');
   }
 
   async *[Service.init]() {
-    const runtime = new CompletionRuntime(this.ctx, this.options);
-    yield () => runtime.dispose();
-    await runtime.initialize();
+    const running = new Set<CompletionRuntime>();
+    const settings = this.ctx.inject(['settings'], scope => {
+      scope.effect(() => scope.settings.configure({auto: false}, this.ctx.fiber));
+    });
+    yield async () => { await Promise.all([...running].map(runtime => runtime.dispose())); await settings.dispose(); };
 
     // Deny read-only calls before Run creates files, as well as at business entry.
     this.ctx.tools.guard(exec => {
@@ -54,7 +49,14 @@ export default class FunctionalLogicCompletion extends Service {
       toolId: TOOL,
       description: '通过软件工厂 Run 执行 ReqCompleter v2.0。输入 software_intro 自然语言需求，交付需求说明书 DOCX、检查材料 ZIP 和结构化结果；保留逐轮材料。方法收敛不代表需求内容已经完整正确。请通过 sf_runtime_run_tool 启动。',
       inputSchema: INPUT_SCHEMA,
-      execute: (input, execution) => runtime.run(input, execution, callers.getStore()),
+      execute: async (input, execution) => {
+        const options = snapshotOptions(this.options);
+        if (running.size >= options.maxConcurrent) throw new CompletionError('BUSY', 'ReqCompleter 已达到并发上限，请稍后重试。');
+        const runtime = new CompletionRuntime(this.ctx, options);
+        running.add(runtime);
+        try { return await runtime.run(input, execution, callers.getStore()); }
+        finally { running.delete(runtime); await runtime.dispose(); }
+      },
     });
   }
 }

@@ -14,7 +14,7 @@ const result = spawnSync(executable, args, {cwd: root, encoding: 'utf8', windows
 if (result.status !== 0) throw new Error(result.stderr || 'npm pack failed');
 const meta = JSON.parse(result.stdout)[0];
 const files = meta.files.map(file => file.path);
-for (const required of ['lib/index.js', 'package.json', 'cordis.patch.yml', 'icon.svg', 'locale/zh.json',
+for (const required of ['lib/index.js', 'client.js', 'package.json', 'cordis.patch.yml', 'icon.svg', 'locale/zh.json',
   'README.md', 'python/worker.py', 'python/reqcompleter_v2_0/pipeline.py', 'requirements/requirements-py312.lock.txt']) {
   if (!files.includes(required)) throw new Error('Package is missing ' + required);
 }
@@ -24,5 +24,5 @@ const stage = join(artifacts, 'release/dsh-functional-logic-completion');
 await mkdir(stage, {recursive: true});
 execFileSync('tar', ['-xf', join(artifacts, meta.filename), '--strip-components', '1', '-C', stage], {windowsHide: true});
 await writeFile(join(artifacts, 'package-check.json'), JSON.stringify({version: meta.version,
-  tgz: meta.filename, installDirectory: stage, frontendIncluded: false, files}, null, 2) + '\n');
+  tgz: meta.filename, installDirectory: stage, frontendIncluded: true, files}, null, 2) + '\n');
 console.log(JSON.stringify({tgz: join(artifacts, meta.filename), installDirectory: stage, fileCount: files.length}));

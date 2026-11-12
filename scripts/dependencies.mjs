@@ -32,5 +32,5 @@ export async function prepareDependencies() {
   for (const name of ['@types/node', 'zod', 'typescript']) await link(name, dirname(requireHost.resolve(`${name}/package.json`)));
   const sdk = join(root, 'node_modules/@software-factory/runtime-sdk');
   await mkdir(sdk, {recursive: true});
-  execFileSync('tar', ['-xf', join(root, 'vendor/software-factory-runtime-sdk-0.1.0.tgz'), '--strip-components', '1', '-C', sdk], {windowsHide: true});
+  execFileSync('tar', ['-xf', join(root, 'vendor/software-factory-runtime-sdk-0.3.0.tgz'), '--strip-components', '1', '-C', sdk], {windowsHide: true});
 }

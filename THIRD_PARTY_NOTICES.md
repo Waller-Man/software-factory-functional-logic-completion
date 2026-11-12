@@ -26,6 +26,6 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-## Software factory Runtime SDK 0.1.0
+## Software factory Runtime SDK 0.3.0
 
-Bundled from vendor/software-factory-runtime-sdk-0.1.0.tgz, supplied by the software factory project.
+Bundled from vendor/software-factory-runtime-sdk-0.3.0.tgz, supplied by the software factory project.

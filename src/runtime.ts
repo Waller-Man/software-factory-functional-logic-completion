@@ -100,6 +100,8 @@ export class CompletionRuntime {
       await execution.reportProgress({stage: 'starting', stageName: '启动准备', progress: estimate.advance('starting'),
         message: '正在启动 Python 并检查任务目录写入。'});
       await execution.log('ReqCompleter v2.0 开始执行；模型和任务目录由 Run 固定。', 'starting');
+      await this.initialize();
+      signal.throwIfAborted();
       const registerMaterials = () => this.materials(execution, indexed);
       const result = await this.worker(input, execution, signal, registerMaterials, estimate);
       signal.throwIfAborted();

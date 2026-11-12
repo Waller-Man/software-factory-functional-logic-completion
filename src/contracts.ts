@@ -1,7 +1,7 @@
 import {REQCOMPLETER_V2_0} from './versions/reqcompleter-v2_0.ts';
 
 export const TOOL = REQCOMPLETER_V2_0.toolName;
-export const PACKAGE_VERSION = '0.2.3';
+export const PACKAGE_VERSION = '0.2.4';
 export const INPUT_SCHEMA = {
   type: 'object',
   properties: {

@@ -12,5 +12,5 @@ await build({config: false, entry: {index: join(root, 'src/index.ts')}, outDir: 
 await writeFile(join(root, 'THIRD_PARTY_NOTICES.md'),
   '# Third-party notices\n\nDSH and its dependencies are provided by the host.\n\n## DSH\n\n'
   + await readFile(join(host, 'LICENSE'), 'utf8')
-  + '\n## Software factory Runtime SDK 0.1.0\n\nBundled from vendor/software-factory-runtime-sdk-0.1.0.tgz, supplied by the software factory project.\n');
+  + '\n## Software factory Runtime SDK 0.3.0\n\nBundled from vendor/software-factory-runtime-sdk-0.3.0.tgz, supplied by the software factory project.\n');
 console.log('Built Host-only ReqCompleter Run plugin. SDK bundled; no profile changes.');
