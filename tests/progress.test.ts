@@ -10,7 +10,10 @@ test('core, hierarchy, per-image progress and delivery are numeric and monotonic
   assert.equal(progress.advance('crud_check', 'completed', 1, true), 53);
   assert.equal(progress.advance('core_document', 'completed'), 67);
   assert.equal(progress.advance('functional_hierarchy', 'completed'), 73);
-  assert.equal(progress.advance('layer_use_cases', 'running', 0, false, 1, 2), 78);
+  assert.equal(progress.advance('function_use_case_descriptions'), 73);
+  assert.equal(progress.advance('function_use_case_descriptions', 'running', 0, false, 1, 2), 76);
+  assert.equal(progress.advance('function_use_case_descriptions', 'completed'), 79);
+  assert.equal(progress.advance('layer_use_cases', 'running', 0, false, 1, 2), 81);
   assert.equal(progress.advance('layer_use_cases', 'completed'), 84);
   assert.equal(progress.advance('leaf_activities', 'running', 0, false, 1, 2), 89);
   assert.equal(progress.advance('leaf_activities', 'completed'), 94);

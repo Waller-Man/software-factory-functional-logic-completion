@@ -91,8 +91,13 @@ def generate_tree(client, store, result):
     return tree
 
 
-def generate_diagrams(client, store, renderer, tree, software_intro):
+def generate_diagrams(client, store, renderer, tree, software_intro, use_cases):
     nodes = flatten(tree)
+    descriptions = {entry["id"]: entry for entry in use_cases}
+    for node, *_ in nodes:
+        record = descriptions.get(node["id"])
+        if not record or record["name"] != node["name"]:
+            raise TaskError("INVALID_FUNCTION_USE_CASE", f"{node['id']} 缺少同编号、同名称的用例描述，不能继续绘图。")
     groups = [({"id": "SYSTEM", "name": tree["systemName"], "description": software_intro,
                 "actors": tree["actors"], "children": tree["functions"]}, None, 0, ())]
     groups += [item for item in nodes if item[0]["children"]]
@@ -103,7 +108,9 @@ def generate_diagrams(client, store, renderer, tree, software_intro):
         for index, (node, parent_id, level, ancestry) in enumerate(selected):
             client.emit("step", step=stage, status="running", completed=index, total=len(selected), nodeName=node["name"])
             context = {"systemName": tree["systemName"], "softwareIntro": software_intro,
-                       "ancestorFunctions": ancestry, "node": node}
+                       "ancestorFunctions": ancestry, "node": node,
+                       "useCase": descriptions.get(node["id"]),
+                       "parentUseCase": descriptions.get(parent_id)}
             if kind == "use-case":
                 instruction = """TASK:USE_CASE
 为本分组生成一张用例图，展现所给 children 中的直属功能、真实参与者及必要关系。
@@ -112,7 +119,9 @@ def generate_diagrams(client, store, renderer, tree, software_intro):
 """
             else:
                 instruction = """TASK:ACTIVITY
-为当前末级子功能生成一张活动图，只描述这个子功能内部的开始、操作、必要判断与结束。
+严格依据 useCase 中已经写入文档的用例描述，为当前末级子功能生成活动图，名称与编号保持一致。
+主流程、备选与异常流程及其返回位置必须对应；parentUseCase 仅用于理解交接，不将父级或相邻功能的全部流程重复画入当前子图。
+不要根据功能名称重新编造流程，不擅自增加取消、退出或其他分支，不遗漏描述中明确的校验、失败提示与返回路径。
 使用 PlantUML 新版活动图语法（start、:操作;、if/else/endif、stop），不要扩展出新的业务需求。
 """
             prompt = (instruction + "只返回从 @startuml 到 @enduml 的一份完整源码，标记各自独占一行；不要解释、Markdown 代码围栏、include、图片或外部资源。\n"
@@ -123,6 +132,8 @@ def generate_diagrams(client, store, renderer, tree, software_intro):
             entry = {"kind": kind, "nodeId": node["id"], "parentId": parent_id,
                      "level": level, "name": node["name"], "source": prefix + ".puml",
                      "status": "skipped", "attempts": []}
+            if kind == "activity":
+                entry["useCaseId"] = node["id"]
             attempt_prompt = prompt
             # Initial generation plus at most two model-assisted corrections.
             for attempt in range(1, 4):

@@ -15,12 +15,14 @@ from docx import Document
 from reqcompleter_v2_0.pipeline import Pipeline as Core, save_document as save_core_document
 from reqcompleter_v2_0.protocol import ModelClient, TaskError, Cancelled
 from reqcompleter_v2_0.storage import TaskStore
-from reqcompleter_v2_1.hierarchy import validate_tree, generate_diagrams
+from reqcompleter_v2_1.hierarchy import validate_tree, generate_diagrams, flatten
 from reqcompleter_v2_1.pipeline import Pipeline, CoreClient, CoreStore
 from reqcompleter_v2_1.render import PlantUML
 from worker_v21_output import synthetic_core
 
 FIXTURE = json.loads((ROOT / "tests/v21-fixture.json").read_text(encoding="utf-8"))
+DESCRIPTION_REPLIES = [json.dumps(value, ensure_ascii=False) for value in FIXTURE["useCaseFlows"].values()]
+FUNCTION_USE_CASES = [{"id": node["id"], "name": node["name"], **FIXTURE["useCaseFlows"][node["id"]]} for node, *_ in flatten(FIXTURE["tree"])]
 USE_CASE = '@startuml\nactor 管理员\nrectangle 商品系统 {\nusecase "商品增加" as UC1\n管理员 --> UC1\n}\n@enduml'
 ACTIVITY = '@startuml\nstart\n:录入商品信息;\nif (信息有效?) then (是)\n:保存商品;\nelse (否)\n:提示修正;\nendif\nstop\n@enduml'
 
@@ -54,7 +56,7 @@ class OutputSmoke(unittest.TestCase):
     def test_real_pngs_embedded_in_docx_and_zip_index_resolves(self):
         directory = ROOT / "test-results" / ("v21-output-" + uuid4().hex)
         store = TaskStore(directory)
-        replies = [json.dumps(FIXTURE["tree"], ensure_ascii=False), USE_CASE, USE_CASE, ACTIVITY, ACTIVITY]
+        replies = [json.dumps(FIXTURE["tree"], ensure_ascii=False), *DESCRIPTION_REPLIES, USE_CASE, USE_CASE, ACTIVITY, ACTIVITY]
         responses = ''.join(json.dumps({"type":"model_response", "id":f"m{index:06d}", "result":{"text":text}}, ensure_ascii=False)+'\n'
                             for index,text in enumerate(replies,1))
         output = io.StringIO()
@@ -67,15 +69,22 @@ class OutputSmoke(unittest.TestCase):
         self.assertEqual(len(result["diagrams"]), 4)
         document = Document(store.path(result["docx_path"]))
         self.assertEqual(len(document.inline_shapes), 4)
+        paragraphs = [paragraph.text for paragraph in document.paragraphs]
+        self.assertLess(paragraphs.index("4.2 分层功能用例说明"), paragraphs.index("5 功能需求"))
+        self.assertIn("4.2.1.1 录入商品信息（F001_01）", paragraphs)
+        self.assertIn("对应用例说明：第 4.2.1.1 节，F001_01 录入商品信息。", paragraphs)
+        self.assertIn("1. 名称为空时提示商品名称不能为空，返回第1步重新输入，不保存商品。", paragraphs)
+        self.assertEqual(len(result["function_use_cases"]), 3)
         self.assertTrue(any("保存商品" in paragraph.text for paragraph in document.paragraphs))
         self.assertEqual([entry["kind"] for entry in result["diagrams"]].count("activity"), 2)
         with zipfile.ZipFile(store.path("final/diagrams.zip")) as package:
+            self.assertEqual(len(json.loads(package.read("function-use-cases.json"))), 3)
             entries = json.loads(package.read("index.json"))
             for entry in entries:
                 self.assertIn(entry["source"], package.namelist())
                 self.assertTrue(package.read(entry["image"]).startswith(b"\x89PNG"))
         events = [json.loads(line) for line in output.getvalue().splitlines()]
-        self.assertEqual(len([event for event in events if event["type"] == "model_request"]), 5)
+        self.assertEqual(len([event for event in events if event["type"] == "model_request"]), 8)
         print(f"Illustrated sample: {store.path(result['docx_path'])}")
 
     def test_invalid_ai_source_preserved_and_render_failure_is_not_success(self):
@@ -96,7 +105,7 @@ class DiagramTolerance(unittest.TestCase):
         store = TaskStore(ROOT / "test-results" / ("v21-tolerance-" + uuid4().hex))
         responses = "".join(json.dumps({"type": "model_response", "id": f"m{i:06d}",
                                        "result": {"text": text}}, ensure_ascii=False) + "\n"
-                            for i, text in enumerate([json.dumps(FIXTURE["tree"], ensure_ascii=False), *replies], 1))
+                            for i, text in enumerate([json.dumps(FIXTURE["tree"], ensure_ascii=False), *DESCRIPTION_REPLIES, *replies], 1))
         output = io.StringIO()
         client = ModelClient("v21-tolerance", store, io.StringIO(responses), output)
         with patch.object(Core, "run", synthetic_core):
@@ -114,10 +123,10 @@ class DiagramTolerance(unittest.TestCase):
         self.assertEqual([a["status"] for a in entry["attempts"]], ["failed", "failed", "generated"])
         self.assertEqual(store.path(entry["attempts"][0]["source"]).read_text(encoding="utf-8"), missing_end)
         requests = [e for e in events if e["type"] == "model_request"]
-        self.assertEqual(len(requests), 7)
-        self.assertIn("末行缺少", requests[4]["messages"][1]["content"])
-        self.assertIn("DIAGRAM_RENDER_FAILED", requests[5]["messages"][1]["content"])
-        self.assertIn("previousSource", requests[4]["messages"][1]["content"])
+        self.assertEqual(len(requests), 10)
+        self.assertIn("末行缺少", requests[7]["messages"][1]["content"])
+        self.assertIn("DIAGRAM_RENDER_FAILED", requests[8]["messages"][1]["content"])
+        self.assertIn("previousSource", requests[7]["messages"][1]["content"])
         self.assertEqual(len(Document(store.path(result["docx_path"])).inline_shapes), 4)
         for attempt in entry["attempts"][:2]:
             self.assertTrue(store.path(attempt["errorPath"]).is_file())
@@ -129,7 +138,7 @@ class DiagramTolerance(unittest.TestCase):
         self.assertEqual(result["document_status"], "succeeded")
         self.assertEqual([e["nodeId"] for e in result["diagram_failures"]], ["SYSTEM", "F001_01"])
         self.assertTrue(all(len(e["attempts"]) == 3 for e in result["diagram_failures"]))
-        self.assertEqual(len([e for e in events if e["type"] == "model_request"]), 9)
+        self.assertEqual(len([e for e in events if e["type"] == "model_request"]), 12)
         self.assertEqual(result["diagrams"][-1]["status"], "generated")
         document = Document(store.path(result["docx_path"]))
         self.assertEqual(len(document.inline_shapes), 2)
@@ -155,7 +164,7 @@ class DiagramTolerance(unittest.TestCase):
         client.complete.side_effect = Cancelled()
         store = TaskStore(ROOT / "test-results" / ("v21-cancel-" + uuid4().hex))
         with self.assertRaises(Cancelled):
-            generate_diagrams(client, store, PlantUML(), FIXTURE["tree"], "small input")
+            generate_diagrams(client, store, PlantUML(), FIXTURE["tree"], "small input", FUNCTION_USE_CASES)
         self.assertEqual(client.complete.call_count, 1)
 
     def test_environment_failure_is_not_retried_or_skipped(self):
@@ -165,7 +174,7 @@ class DiagramTolerance(unittest.TestCase):
         renderer.render.side_effect = TaskError("JAVA_NOT_READY", "Java unavailable")
         store = TaskStore(ROOT / "test-results" / ("v21-environment-" + uuid4().hex))
         with self.assertRaises(TaskError) as caught:
-            generate_diagrams(client, store, renderer, FIXTURE["tree"], "small input")
+            generate_diagrams(client, store, renderer, FIXTURE["tree"], "small input", FUNCTION_USE_CASES)
         self.assertEqual(caught.exception.code, "JAVA_NOT_READY")
         self.assertEqual(client.complete.call_count, 1)
 

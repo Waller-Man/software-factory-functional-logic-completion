@@ -47,7 +47,7 @@ export default class FunctionalLogicCompletionV21 extends Service {
     });
     registerRunTool<Input>(this.ctx, {
       toolId: TOOL,
-      description: '通过软件工厂 Run 执行 ReqCompleter v2.1。输入 software_intro 自然语言需求，交付含分层功能、各层用例图和叶子活动图的 DOCX、功能树、图文件 ZIP、检查材料和结构化结果；保留逐轮材料。方法收敛不代表需求内容已经完整正确。请通过 sf_runtime_run_tool 启动。',
+      description: '通过软件工厂 Run 执行 ReqCompleter v2.1。输入 software_intro 自然语言需求，交付含分层功能用例描述、各层用例图和依据对应描述生成的叶子活动图的 DOCX、功能树、图文件 ZIP、检查材料和结构化结果；保留逐轮材料。方法收敛不代表需求内容已经完整正确。请通过 sf_runtime_run_tool 启动。',
       inputSchema: INPUT_SCHEMA,
       modelProtocols: ['openai-completions'],
       execute: async (input, execution) => {

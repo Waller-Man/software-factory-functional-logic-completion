@@ -21,6 +21,7 @@ const pythonEnv = {PYTHONDONTWRITEBYTECODE: '1', PYTHONUNBUFFERED: '1', PYTHONUT
 const stageNames: Record<string, string> = {
   starting: '启动准备', render_environment: '检查本地画图环境',
   core_document: '整理原始补全结果', functional_hierarchy: '整理功能层次',
+  function_use_case_descriptions: '补齐分层功能用例描述',
   layer_use_cases: '生成各层用例图', leaf_activities: '生成子功能活动图',
   extract_entities: '提取实体', generate_use_cases: '生成用例', describe_use_cases: '描述用例',
   generate_er_model: '生成 E-R 模型', generate_crud: '生成 CRUD 三元组', check_er_model: '检查 E-R 模型',
@@ -126,6 +127,7 @@ export class CompletionRuntime {
         executionStatus: 'succeeded', documentStatus: 'generated',
         convergenceStatus: result.converged ? 'converged' : 'not_converged',
         iterations: result.iterations, reachedIterationLimit: result.reached_iteration_limit,
+        functionUseCaseCount: Array.isArray(result.function_use_cases) ? result.function_use_cases.length : 0,
         diagramStatus: result.diagram_status, diagramCount: generatedDiagrams,
         diagramMissingCount: missingDiagrams, diagramTotal: diagramEntries.length,
         finishedAt: new Date().toISOString(),
@@ -250,7 +252,7 @@ export class CompletionRuntime {
           requests.add(event.id);
           await registerMaterials();
           try {
-            const answer = event.module === 'V21Hierarchy'
+            const answer = (event.module === 'V21Hierarchy' || event.module === 'V21FunctionUseCases')
               ? await callJsonModel(jsonConnection, event.messages, runningSignal)
               : await execution.model.call({messages: event.messages});
             await send(process.stdin, {type: 'model_response', protocolVersion: 1, runId: execution.runId, id: event.id, result: {text: answer.text}}, this.options.maxProtocolBytes);

@@ -49,13 +49,39 @@ def save_document(store, result):
         caption.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
     for title, field in (("1 软件概述", "software_intro"), ("2 数据实体", "data_entities"),
-                         ("3 业务用例", "use_cases"), ("4 用例说明", "use_case_description")):
+                         ("3 业务用例", "use_cases")):
         document.add_heading(title, 1)
         if isinstance(result[field], list):
             for item in result[field]:
                 document.add_paragraph(str(item), style="List Bullet")
         else:
             paragraphs(result[field])
+    document.add_heading("4 用例说明", 1)
+    document.add_heading("4.1 原补全用例说明", 2)
+    paragraphs(result["use_case_description"])
+    document.add_heading("4.2 分层功能用例说明", 2)
+    use_cases = {entry["id"]: entry for entry in result["function_use_cases"]}
+
+    def descriptions(nodes, prefix="4.2", level=3):
+        for index, node in enumerate(nodes, 1):
+            numbering = f"{prefix}.{index}"
+            record = use_cases[node["id"]]
+            document.add_heading(f"{numbering} {record['name']}（{record['id']}）", level)
+            document.add_paragraph("参与者：" + "、".join(record["actors"]))
+            if record["parentId"] != "SYSTEM":
+                parent = use_cases[record["parentId"]]
+                document.add_paragraph(f"所属功能：{parent['id']} {parent['name']}")
+            paragraphs(record["description"])
+            for label, field in (("前置条件", "preconditions"), ("后置条件", "postconditions"),
+                                 ("主流程", "mainFlow"), ("备选与异常流程", "alternativeFlows")):
+                document.add_paragraph(label + "：")
+                for number, step in enumerate(record[field], 1):
+                    document.add_paragraph(f"{number}. {step}")
+                if not record[field]:
+                    document.add_paragraph("无。")
+            descriptions(node["children"], numbering, level + 1)
+
+    descriptions(result["functional_tree"]["functions"])
     document.add_heading("5 功能需求", 1)
     document.add_heading("5.1 功能需求说明", 2)
     paragraphs(result["functional_requirements"])
@@ -69,6 +95,7 @@ def save_document(store, result):
             document.add_heading(f"{numbering} {node['name']}（{node['id']}）", level)
             document.add_paragraph("参与者：" + "、".join(node["actors"]))
             paragraphs(node["description"])
+            document.add_paragraph(f"对应用例说明：第 {numbering.replace('5.2', '4.2', 1)} 节，{node['id']} {node['name']}。")
             picture(by_node[node["id"]])
             functions(node["children"], numbering, level + 1)
 

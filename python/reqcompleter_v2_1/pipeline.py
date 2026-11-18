@@ -11,6 +11,7 @@ from . import BUSINESS_VERSION, ADAPTER_VERSION
 from .document import save_document
 from .hierarchy import generate_tree, generate_diagrams
 from .render import PlantUML
+from .use_cases import generate_function_use_cases
 
 
 class CoreStore(TaskStore):
@@ -51,12 +52,13 @@ class Pipeline:
         core_store = CoreStore(self.store.root)
         core_store.files = self.store.files
         result = CorePipeline(CoreClient(self.client), core_store, self.max_iterations).run(software_intro)
-        # The core converges exactly as before; the following steps only change delivery.
+        # Keep core convergence unchanged; describe decomposed functions before illustrated delivery.
         tree = generate_tree(self.client, self.store, result)
-        diagrams = generate_diagrams(self.client, self.store, self.renderer, tree, software_intro)
+        use_cases = generate_function_use_cases(self.client, self.store, tree, result)
+        diagrams = generate_diagrams(self.client, self.store, self.renderer, tree, software_intro, use_cases)
         failures = [entry for entry in diagrams if entry["status"] == "skipped"]
         result.update({"business_version": BUSINESS_VERSION, "adapter_version": ADAPTER_VERSION,
-                       "functional_tree": tree, "diagrams": diagrams,
+                       "functional_tree": tree, "function_use_cases": use_cases, "diagrams": diagrams,
                        "diagram_status": "partial" if failures else "generated",
                        "diagram_failures": failures,
                        "document_status": "pending"})
@@ -67,6 +69,7 @@ class Pipeline:
         archive = io.BytesIO()
         with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as package:
             package.write(self.store.path("final/functional-tree.json"), "functional-tree.json")
+            package.write(self.store.path("intermediate/v2_1/function-use-cases.json"), "function-use-cases.json")
             archive_entries = []
             for entry in diagrams:
                 archived = {**entry}

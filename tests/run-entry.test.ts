@@ -86,10 +86,14 @@ stop
   await ctx.plugin(Runtime, {allowedToolIds: [TOOL], defaultTimeoutMs: 15000});
   let gatewayOrigin = options.jsonGateway;
   if (!gatewayOrigin) {
-    const server = createServer(async (_req, res) => {
+    const server = createServer(async (req, res) => {
+      let raw = ''; for await (const chunk of req) raw += chunk;
+      const body = JSON.parse(raw);
+      const content = JSON.stringify(body.messages);
       const data = JSON.parse(await readFile(join(root, 'tests/v21-fixture.json'), 'utf8'));
       res.setHeader('content-type', 'application/json');
-      res.end(JSON.stringify({choices: [{finish_reason: 'stop', message: {content: JSON.stringify(data.tree)}}]}));
+      const nodeId = content.match(/NODE_ID:([A-Za-z0-9_-]+)/)?.[1];
+      res.end(JSON.stringify({choices: [{finish_reason: 'stop', message: {content: JSON.stringify(nodeId ? data.useCaseFlows[nodeId] : data.tree)}}]}));
     });
     await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
     gatewayOrigin = `http://127.0.0.1:${(server.address() as any).port}`;
@@ -251,7 +255,7 @@ test('v2.1 native Run: isolated mock model, real local images and coexistence wi
   assert.equal(run.status, 'completed', JSON.stringify(run));
   assert.equal(run.model.provider, 'mock-b');
   assert.equal(f.agent.options.provider, 'mock-a');
-  assert.equal(f.requests.length, 4, 'The function tree always uses the JSON gateway');
+  assert.equal(f.requests.length, 4, 'The function tree and descriptions use the JSON gateway');
   assert.ok(f.requests.every(request => request.sessionId?.startsWith('sf-run-model-')));
   assert.equal(run.result.files.length, 5);
   const directory = join(f.workspace, 'outputs/runs', run.runId);
@@ -259,6 +263,10 @@ test('v2.1 native Run: isolated mock model, real local images and coexistence wi
   assert.equal(result.business_version, '2.1');
   assert.equal(result.diagram_status, 'generated');
   assert.equal(result.diagrams.length, 4);
+  assert.equal(result.function_use_cases.length, 3);
+  assert.ok(result.diagrams.filter((d: any) => d.kind === 'activity').every((d: any) => d.useCaseId === d.nodeId));
+  assert.ok(f.requests.filter(request => JSON.stringify(request.messages).includes('TASK:ACTIVITY')).every(request => JSON.stringify(request.messages).includes('mainFlow')));
+  assert.ok((await stat(join(directory, 'intermediate/v2_1/function-use-cases.json'))).isFile());
   for (const diagram of result.diagrams) {
     const bytes = await readFile(join(directory, diagram.image));
     assert.equal(bytes.subarray(1, 4).toString(), 'PNG');
@@ -301,7 +309,7 @@ test('v2.1 JSON gateway: malformed tree retries through Runtime and secrets stay
     const body = JSON.parse(raw); jsonBodies.push(body);
     const fixture = JSON.parse(await readFile(join(root, 'tests/v21-fixture.json'), 'utf8'));
     res.setHeader('content-type', 'application/json');
-    res.end(JSON.stringify({choices: [{finish_reason: 'stop', message: {content: jsonBodies.length === 1 ? '{"functions":[}' : JSON.stringify(fixture.tree)}}], usage: {prompt_tokens: 2, completion_tokens: 3}}));
+    res.end(JSON.stringify({choices: [{finish_reason: 'stop', message: {content: jsonBodies.length === 1 ? '{"functions":[}' : JSON.stringify(JSON.stringify(body.messages).includes('TASK:FUNCTION_USE_CASE_DESCRIPTION') ? fixture.useCaseFlows[JSON.stringify(body.messages).match(/NODE_ID:([A-Za-z0-9_-]+)/)![1]] : fixture.tree)}}], usage: {prompt_tokens: 2, completion_tokens: 3}}));
   });
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
   t.after(() => new Promise<void>(resolve => {server.closeAllConnections(); server.close(() => resolve());}));
@@ -310,10 +318,10 @@ test('v2.1 JSON gateway: malformed tree retries through Runtime and secrets stay
   const accepted = await f.call('run_tool', {toolId: TOOL, input: {software_intro: '管理员录入并保存商品。'}});
   const run = await f.finish(accepted.runId);
   assert.equal(run.status, 'completed', JSON.stringify(run));
-  assert.equal(jsonBodies.length, 2); assert.equal(f.requests.length, 4);
+  assert.equal(jsonBodies.length, 5); assert.equal(f.requests.length, 4);
   assert.ok(jsonBodies.every(body => body.model === 'mock' && body.response_format.type === 'json_object'));
   assert.match(jsonBodies[1].messages[1].content, /字符位置/);
-  assert.equal(run.modelCalls.filter((call: any) => call.protocol === 'openai-completions').length, 2);
+  assert.equal(run.modelCalls.filter((call: any) => call.protocol === 'openai-completions').length, 5);
   const directory = join(f.workspace, 'outputs/runs', run.runId);
   assert.ok((await stat(join(directory, 'intermediate/v2_1/function-tree.attempt-01.error.json'))).isFile());
   const input = await readFile(join(directory, 'input/reqcompleter-request.json'), 'utf8');

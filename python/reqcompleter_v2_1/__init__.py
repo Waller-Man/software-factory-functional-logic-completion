@@ -2,4 +2,4 @@
 from reqcompleter_v2_0 import SOURCE_SHA256
 
 BUSINESS_VERSION = "2.1"
-ADAPTER_VERSION = "2.1.0"
+ADAPTER_VERSION = "2.1.1"

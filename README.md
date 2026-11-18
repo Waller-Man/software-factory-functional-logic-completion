@@ -4,7 +4,7 @@ DSH 后端插件，通过软件工厂 Run 执行需求补全，将功能拆成�
 
 | 项目 | 值 |
 |---|---|
-| 插件包 | `@deepseek-ai/dsh-functional-logic-completion-v2-1`，0.3.3 |
+| 插件包 | `@deepseek-ai/dsh-functional-logic-completion-v2-1`，0.3.4 |
 | 插件显示名称 | 需求功能逻辑补全 v2.1 |
 | 业务版本 | ReqCompleter v2.1 |
 | 执行入口 | `sf_functional_logic_completion_v2_1` |
@@ -55,7 +55,11 @@ Linux 使用 `node scripts/prepare-python.mjs /usr/bin/python3.12`，在目标�
 
 保存无需重启，仅影响之后启动的任务；运行中的任务使用启动时固定的配置。任务启动时检查 Python、Java 和 JAR，插件能启用不代表环境已经就绪。时限在软件工厂 Runtime 插件自己的原生配置页面设置。模型及凭据仍由 DSH 管理，不填写额外 API Key；JSON 网关的临时令牌仅留在 TS 内存中，不传给 Python。
 
-功能树固定使用 SDK 0.3.0 网关的 `response_format: {type: "json_object"}`，没有模式开关。执行入口声明 `openai-completions` 协议；须在 DSH 选择支持 JSON 输出的 Chat Completions 连接，不兼容时明确报错，不自动回退。用例图和活动图仍按 PlantUML 文本生成。
+功能树及新增分层功能用例描述固定使用 SDK 0.3.0 网关的 `response_format: {type: "json_object"}`，没有模式开关。执行入口声明 `openai-completions` 协议；须在 DSH 选择支持 JSON 输出的 Chat Completions 连接，不兼容时明确报错，不自动回退。用例图和活动图仍按 PlantUML 文本生成。
+
+功能分层后，AI 为每个功能节点（含大功能与拆分出的子功能）补齐前后置条件、主流程及备选／异常流程。编号、名称和参与者沿用功能树；子功能记录所属功能。第 4.1 节保留原补全用例，第 4.2 节按层级列出新增用例描述；第 5.2 节的同编号功能和图引用对应的第 4.2 节。活动图生成时传入对应完整描述及父级描述，要求依照已写出的流程绘制。仍只为末级功能生成活动图，不增加总活动图，也不改变原 CRUD 补全算法。
+
+新增阶段“补齐分层功能用例描述”按完成节点数显示估算进度；会增加模型请求和耗时。描述的 JSON 或必填字段校验失败时最多重试两次，仍失败则明确终止，不以缺失描述继续绘图。各次响应和错误保存在 `intermediate/v2_1/use-cases/`，汇总为 `intermediate/v2_1/function-use-cases.json`；包含在检查材料中，汇总也放入图文件 ZIP 和 `result.json` 的 `function_use_cases`。结构校验和提示词约束不等于业务语义已全部验证，交付仍需复核。
 
 功能树 JSON 解析或结构校验失败时，将具体错误反馈给模型，最多重试两次。每次原始响应和错误都保留；三次失败仍终止任务，不能用错误功能树继续绘图。图源码的重试与缺图交付规则保持不变。
 
@@ -87,9 +91,9 @@ Linux 使用 `node scripts/prepare-python.mjs /usr/bin/python3.12`，在目标�
 |---|---|
 | `requirements.docx` | 原需求内容、分层功能说明、系统总览及每个分组的用例图、每个末级子功能的活动图；图片插入对应章节 |
 | `functional-tree.json` | 功能编号、名称、说明、参与者和父子结构 |
-| `diagrams.zip` | PNG 图片、原始 `.puml`、功能树与图索引 |
+| `diagrams.zip` | PNG 图片、原始 `.puml`、功能树、分层功能用例描述与图索引 |
 | `checks.zip` | 输入、实体、用例、E-R/CRUD、每轮状态、模型请求响应及日志等检查材料 |
-| `result.json` | 结构化结果、功能树、图文件对应关系与收敛状态 |
+| `result.json` | 结构化结果、功能树、分层功能用例描述、图文件对应关系与收敛状态 |
 
 所有文件保存在发起聊天工作区的 `outputs/runs/<runId>/`，最终文件在 `final/`，初始和新增材料在 `intermediate/`，逐轮快照在 `snapshots/`。失败和取消时保留已完成材料。
 
@@ -113,9 +117,11 @@ node scripts/pack.mjs
 
 从 Git 克隆源码时，如缺少 `tools/plantuml.jar`，先按 `tools/README.md` 获取对应官方文件；打包脚本会拒绝缺少 JAR 的发布包。
 
-安装目录为 `artifacts/release/dsh-functional-logic-completion-v2-1/`，TGZ 为 `artifacts/deepseek-ai-dsh-functional-logic-completion-v2-1-0.3.3.tgz`。PlantUML JAR 及其许可证已随包提供；Java、Python 虚拟环境、Skill 和任务文件不随包发布。在实际安装目录创建虚拟环境即可，无需手动复制 JAR。
+安装目录为 `artifacts/release/dsh-functional-logic-completion-v2-1/`，TGZ 为 `artifacts/deepseek-ai-dsh-functional-logic-completion-v2-1-0.3.4.tgz`。PlantUML JAR 及其许可证已随包提供；Java、Python 虚拟环境、Skill 和任务文件不随包发布。在实际安装目录创建虚拟环境即可，无需手动复制 JAR。
 
-轻量检查：`node scripts/typecheck.mjs`、`node --experimental-transform-types --test tests/progress.test.ts tests/run-entry.test.ts`、`.venv\Scripts\python.exe -B tests/python_smoke.py` 和 `.venv\Scripts\python.exe -B tests/v21_output_smoke.py`。后者需要本地 Java/JAR，仅运行小型模拟输入，不运行完整补全或真实模型。
+新增描述的快速检查：`.venv\Scripts\python.exe -B tests/function_use_cases.py`。
+
+其他轻量检查：`node scripts/typecheck.mjs`、`node --experimental-transform-types --test tests/progress.test.ts tests/run-entry.test.ts`、`.venv\Scripts\python.exe -B tests/python_smoke.py` 和 `.venv\Scripts\python.exe -B tests/v21_output_smoke.py`。后者需要本地 Java/JAR，仅运行小型模拟输入，不运行完整补全或真实模型。
 
 安装不等于 Python/Java 环境就绪；环境探测不等于真实任务完成。缺少 JAR、模型不可用、只读会话或目录写入失败时，按任务报告处理，不会提升权限。图源码校验或渲染失败按上述有限重试和缺图交付规则处理，不会静默省略。
 

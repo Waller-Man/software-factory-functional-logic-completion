@@ -8,7 +8,7 @@ const coreStages: Record<string, readonly [number, number]> = {
 const iterationStages = ['crud_check', 'complete_use_cases', 'complete_er_model', 'complete_crud'];
 const outputStages: Record<string, readonly [number, number]> = {
   starting: [0, 2], render_environment: [2, 2], functional_hierarchy: [67, 73],
-  layer_use_cases: [73, 84], leaf_activities: [84, 94], save_docx: [94, 98], publishing: [98, 99],
+  function_use_case_descriptions: [73, 79], layer_use_cases: [79, 84], leaf_activities: [84, 94], save_docx: [94, 98], publishing: [98, 99],
 };
 
 export class ProgressEstimate {

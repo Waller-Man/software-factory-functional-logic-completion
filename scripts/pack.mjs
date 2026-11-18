@@ -18,7 +18,7 @@ if (result.status !== 0) throw new Error(result.stderr || 'npm pack failed');
 const meta = JSON.parse(result.stdout)[0];
 const files = meta.files.map(file => file.path);
 for (const required of ['lib/index.js', 'client.js', 'package.json', 'cordis.patch.yml', 'icon.svg', 'locale/zh.json',
-  'README.md', 'python/worker_v2_1.py', 'python/reqcompleter_v2_0/pipeline.py', 'python/reqcompleter_v2_1/pipeline.py', 'tools/README.md', 'tools/plantuml.jar', 'tools/plantuml-LICENSE.txt', 'tools/plantuml-NOTICE.md', 'requirements/requirements-py312.lock.txt']) {
+  'README.md', 'python/worker_v2_1.py', 'python/reqcompleter_v2_0/pipeline.py', 'python/reqcompleter_v2_1/pipeline.py', 'python/reqcompleter_v2_1/use_cases.py', 'tools/README.md', 'tools/plantuml.jar', 'tools/plantuml-LICENSE.txt', 'tools/plantuml-NOTICE.md', 'requirements/requirements-py312.lock.txt']) {
   if (!files.includes(required)) throw new Error('Package is missing ' + required);
 }
 if (files.some(file => /(^|\/)(node_modules|__pycache__|\.venv|tests|src)(\/|$)|\.pyc$|(^|\/)\.env/.test(file)
